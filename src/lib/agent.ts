@@ -52,13 +52,13 @@ export async function runAgent(
 
     // 2. Clone the repo (shallow for speed)
     setStatus('cloning', `Cloning ${party.repoOwner}/${party.repoName}...`)
-    await sandbox.process.exec(
+    await sandbox.process.executeCommand(
       `cd /home/daytona && git clone --depth 1 https://github.com/${party.repoOwner}/${party.repoName}.git repo`,
     )
 
     // 3. Read codebase context for Claude
     setStatus('reading', 'Reading codebase...')
-    const fileList = await sandbox.process.exec(
+    const fileList = await sandbox.process.executeCommand(
       `cd /home/daytona/repo && find . -type f \\( -name "*.tsx" -o -name "*.jsx" -o -name "*.ts" -o -name "*.js" -o -name "*.json" -o -name "*.md" -o -name "*.css" \\) ! -path "*/node_modules/*" ! -path "*/.git/*" | head -25`,
     )
     const filesForContext = fileList.result?.split('\n').filter(Boolean) ?? []
@@ -82,7 +82,7 @@ export async function runAgent(
 
     const startGen = Date.now()
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-opus-4-7',
       max_tokens: 8192,
       system: persona.systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -101,15 +101,16 @@ export async function runAgent(
     for (const change of fileChanges) {
       const fullPath = `/home/daytona/repo/${change.path}`
       const parentDir = fullPath.substring(0, fullPath.lastIndexOf('/'))
-      await sandbox.process.exec(`mkdir -p ${parentDir}`)
+      await sandbox.process.executeCommand(`mkdir -p ${parentDir}`)
       await sandbox.fs.uploadFile(Buffer.from(change.content), fullPath)
       linesAdded += change.content.split('\n').length
     }
 
     // 6. Install deps + start dev server (THE LOVABLE MOMENT)
     setStatus('testing', 'Installing dependencies...')
-    const installResult = await sandbox.process.exec(
+    const installResult = await sandbox.process.executeCommand(
       'cd /home/daytona/repo && npm install --no-audit --no-fund --prefer-offline',
+      undefined,
       undefined,
       300_000, // 5 min timeout
     )
@@ -121,7 +122,7 @@ export async function runAgent(
 
     setStatus('committing', 'Starting dev server...')
     // Start dev server detached
-    await sandbox.process.exec(
+    await sandbox.process.executeCommand(
       'cd /home/daytona/repo && nohup npm run dev > /tmp/dev.log 2>&1 &',
     )
 
@@ -138,10 +139,11 @@ export async function runAgent(
       console.error(`[${persona.id}] Could not get preview URL:`, e)
     }
 
-    // 8. Branch + commit (for the eventual PR creation)
+    // 8. Branch + commit + push (so the PR endpoint can reference the branch)
     const branchName = `patchparty/${persona.id}/${party.id.slice(0, 8)}`
-    await sandbox.process.exec(
-      `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && git commit -m "feat: ${party.issueTitle.replace(/"/g, "'")} (via PatchParty: ${persona.name})" --allow-empty`,
+    const token = process.env.GITHUB_TOKEN
+    await sandbox.process.executeCommand(
+      `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && git commit -m "feat: ${party.issueTitle.replace(/"/g, "'")} (via PatchParty: ${persona.name})" --allow-empty && git push "https://x-access-token:${token}@github.com/${party.repoOwner}/${party.repoName}.git" ${branchName}`,
     )
 
     // Generate human-friendly summary using cheaper Haiku
