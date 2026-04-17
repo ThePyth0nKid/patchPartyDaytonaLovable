@@ -2,7 +2,7 @@
 // Spawns sandbox, clones repo, runs Claude, applies changes,
 // starts dev-server, generates Live-Preview URL. KEEPS SANDBOX ALIVE.
 
-import { Daytona, CreateSandboxFromSnapshotParams } from '@daytonaio/sdk'
+import { Daytona } from '@daytonaio/sdk'
 import Anthropic from '@anthropic-ai/sdk'
 import { Persona } from './personas'
 import { AgentState, AgentStatus, Party } from './types'
@@ -44,13 +44,11 @@ export async function runAgent(
   try {
     // 1. Spin up PUBLIC sandbox (so preview URLs work in iframes without auth)
     setStatus('initializing', 'Spinning up sandbox...')
-    sandbox = await daytona.create(
-      new CreateSandboxFromSnapshotParams({
-        language: 'typescript',
-        public: true,
-        autoStopInterval: PREVIEW_LIFETIME_MINUTES,
-      }),
-    )
+    sandbox = await daytona.create({
+      language: 'typescript',
+      public: true,
+      autoStopInterval: PREVIEW_LIFETIME_MINUTES,
+    })
 
     // 2. Clone the repo (shallow for speed)
     setStatus('cloning', `Cloning ${party.repoOwner}/${party.repoName}...`)
