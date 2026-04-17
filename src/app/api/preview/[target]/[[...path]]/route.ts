@@ -132,7 +132,7 @@ export const hmrClient = {
   queueUpdate() {}, queueMsg() {}, warnFailedFetch() {},
 };
 export function warnFailedFetch() {}
-// Default export guard so `import x from '/@vite/client'` still resolves.
+// Default export guard so a bare default import resolves.
 export default {};
 `
 
