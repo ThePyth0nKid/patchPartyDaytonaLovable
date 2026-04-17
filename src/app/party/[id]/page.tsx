@@ -4,6 +4,11 @@ import { use, useEffect, useState } from 'react'
 import { PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent } from '@/lib/types'
 
+function encodePreviewTarget(url: string, token?: string): string {
+  const json = JSON.stringify(token ? { url, token } : { url })
+  return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
 export default function PartyPage({
   params,
 }: {
@@ -90,9 +95,9 @@ export default function PartyPage({
           </div>
           <div className="text-right">
             <div className="text-sm">{doneCount} of 5 agents finished</div>
-            <div className="w-40 h-2 bg-slate-800 rounded-full mt-1 overflow-hidden">
+            <div className="w-40 h-1.5 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-purple-600 to-blue-600 transition-all duration-500"
+                className="h-full bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] transition-all duration-500 ease-linear"
                 style={{ width: `${(doneCount / 5) * 100}%` }}
               />
             </div>
@@ -145,13 +150,14 @@ function AgentCard({
   selected: boolean
   onSelect: () => void
 }) {
-  const colorMap: Record<string, string> = {
-    hackfix: 'border-blue-500',
-    craftsman: 'border-green-500',
-    'ux-king': 'border-orange-500',
-    defender: 'border-slate-500',
-    innovator: 'border-purple-500',
+  const accentMap: Record<string, { border: string; glow: string; text: string }> = {
+    hackfix:    { border: 'border-hackfix',    glow: 'shadow-[0_0_24px_-6px_#FF6B35]', text: 'text-hackfix' },
+    craftsman:  { border: 'border-craftsman',  glow: 'shadow-[0_0_24px_-6px_#14B8A6]', text: 'text-craftsman' },
+    'ux-king':  { border: 'border-ux-king',    glow: 'shadow-[0_0_24px_-6px_#E879F9]', text: 'text-ux-king' },
+    defender:   { border: 'border-defender',   glow: 'shadow-[0_0_24px_-6px_#60A5FA]', text: 'text-defender' },
+    innovator:  { border: 'border-innovator',  glow: 'shadow-[0_0_24px_-6px_#A78BFA]', text: 'text-innovator' },
   }
+  const accent = accentMap[persona.color]
 
   const isDone = agent.status === 'done'
   const isError = agent.status === 'error'
@@ -162,9 +168,9 @@ function AgentCard({
     <div
       onClick={onSelect}
       className={`
-        bg-slate-900 border-2 rounded-xl p-4 transition-all
-        ${selected ? colorMap[persona.color] : 'border-slate-800'}
-        ${isDone ? 'cursor-pointer hover:border-slate-600' : ''}
+        bg-slate-900/60 backdrop-blur border rounded-[7px] p-4 transition-all duration-200
+        ${selected ? `${accent.border} ${accent.glow}` : 'border-slate-800'}
+        ${isDone ? 'cursor-pointer hover:border-slate-700' : ''}
         ${isRunning ? 'animate-pulse' : ''}
       `}
     >
@@ -205,7 +211,7 @@ function AgentCard({
         )}
 
         {isDone && (
-          <div className="mt-3 pt-2 text-center text-xs font-medium text-purple-400">
+          <div className={`mt-3 pt-2 text-center text-xs font-medium ${accent.text}`}>
             Click to inspect →
           </div>
         )}
@@ -282,7 +288,7 @@ function ComparePanel({
                 onClick={() => setView('preview')}
                 className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
                   view === 'preview'
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-[#A78BFA] text-black'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -292,7 +298,7 @@ function ComparePanel({
                 onClick={() => setView('code')}
                 className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
                   view === 'code'
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-[#A78BFA] text-black'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -327,7 +333,7 @@ function ComparePanel({
               {view === 'preview' && agent.result.previewUrl && (
                 <div className="bg-white rounded-lg overflow-hidden border border-slate-700">
                   <iframe
-                    src={`/api/preview/${party.id}/${selectedPersona}/`}
+                    src={`/api/preview/${encodePreviewTarget(agent.result.previewUrl, agent.result.previewToken)}/`}
                     className="w-full h-[600px]"
                     title={`${persona.name} live preview`}
                   />
@@ -370,7 +376,7 @@ function ComparePanel({
                 href={prUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-purple-400 hover:text-purple-300 underline"
+                className="text-[#A78BFA] hover:text-[#C4B5FD] underline"
               >
                 {prUrl}
               </a>
@@ -379,7 +385,7 @@ function ComparePanel({
             <button
               onClick={handlePickThis}
               disabled={creatingPR}
-              className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-lg font-semibold disabled:opacity-50"
+              className="w-full py-3 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 text-black rounded-lg font-semibold disabled:opacity-50"
             >
               {creatingPR
                 ? 'Creating PR...'
