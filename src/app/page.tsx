@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, ArrowUpRight, Github, Terminal, Sparkles, Shield } from 'lucide-react'
-import { PERSONAS } from '@/lib/personas'
+import { PHILOSOPHY_PERSONAS as PERSONAS } from '@/lib/personas'
 
 const PERSONA_ACCENTS: Record<string, string> = {
   hackfix: '#FF6B35',

@@ -2,7 +2,7 @@
 
 import { use, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
-import { PERSONAS, PersonaId } from '@/lib/personas'
+import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent } from '@/lib/types'
 
 const PERSONA_ACCENTS: Record<string, string> = {
@@ -42,7 +42,7 @@ function encodePreviewTarget(url: string, token?: string): string {
 function collectSandboxIds(party: Party | null): string[] {
   if (!party) return []
   return Object.values(party.agents)
-    .map((a) => a.result?.sandboxId)
+    .map((a) => a?.result?.sandboxId)
     .filter((x): x is string => !!x)
 }
 
@@ -129,7 +129,7 @@ export default function PartyPage({
       <main className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-50">
         <div className="flex flex-col items-center gap-5">
           <div className="flex gap-2">
-            {PERSONAS.map((p, i) => (
+            {PHILOSOPHY_PERSONAS.map((p, i) => (
               <span
                 key={p.id}
                 className="text-2xl animate-pulse-slow"
@@ -150,9 +150,14 @@ export default function PartyPage({
     )
   }
 
-  const doneCount = Object.values(party.agents).filter(
-    (a) => a.status === 'done',
-  ).length
+  const activeAgents = Object.values(party.agents).filter(
+    (a): a is AgentState => !!a,
+  )
+  const teamSize = activeAgents.length || 5
+  const doneCount = activeAgents.filter((a) => a.status === 'done').length
+  const teamPersonas = (party.classification?.selectedPersonas ?? []).map(
+    (id) => PERSONAS.find((p) => p.id === id)!,
+  ).filter(Boolean)
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
@@ -187,7 +192,7 @@ export default function PartyPage({
             </span>
             <span className="h-px flex-1 bg-slate-800" />
             <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
-              {doneCount} / 5 done
+              {doneCount} / {teamSize} done
             </span>
           </div>
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
@@ -209,7 +214,7 @@ export default function PartyPage({
               <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] transition-all duration-700 ease-linear"
-                  style={{ width: `${(doneCount / 5) * 100}%` }}
+                  style={{ width: `${(doneCount / teamSize) * 100}%` }}
                 />
               </div>
             </div>
@@ -217,11 +222,58 @@ export default function PartyPage({
         </div>
       </section>
 
-      {/* Agents grid */}
+      {/* Orchestrator banner — visible for every party that was classified */}
+      {party.classification && teamPersonas.length > 0 && (
+        <section className="border-b border-slate-800/60">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+            <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
+              <Sparkles className="w-3.5 h-3.5" />
+              Orchestrator
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-300">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-800 font-mono">
+                {party.classification.type}
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-800 font-mono">
+                {party.classification.complexity}
+              </span>
+              {party.classification.concerns.slice(0, 3).map((c) => (
+                <span
+                  key={c}
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-800 font-mono"
+                >
+                  {c}
+                </span>
+              ))}
+              <span className="text-slate-500 italic hidden md:inline">
+                · {party.classification.reason}
+              </span>
+            </div>
+            <div className="md:ml-auto flex items-center gap-1.5">
+              {teamPersonas.map((p) => (
+                <span
+                  key={p.id}
+                  title={`${p.name} — ${p.tagline}`}
+                  className="text-xl leading-none"
+                >
+                  {p.icon}
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* Classifier reason on small screens */}
+          <div className="md:hidden max-w-7xl mx-auto px-6 pb-3 text-[12px] text-slate-500 italic">
+            {party.classification.reason}
+          </div>
+        </section>
+      )}
+
+      {/* Agents grid — renders exactly the team the orchestrator picked */}
       <section className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          {PERSONAS.map((persona) => {
-            const agent = party.agents[persona.id]
+          {activeAgents.map((agent) => {
+            const persona = PERSONAS.find((p) => p.id === agent.persona)
+            if (!persona) return null
             return (
               <AgentCard
                 key={persona.id}
@@ -375,8 +427,12 @@ function ComparePanel({
 }) {
   const agent = party.agents[selectedPersona]
   const persona = PERSONAS.find((p) => p.id === selectedPersona)!
+  const team = party.classification?.selectedPersonas ?? []
+  const candidateIndex = Math.max(0, team.indexOf(selectedPersona)) + 1
+  const teamSize = team.length || Object.keys(party.agents).length
   const [creatingPR, setCreatingPR] = useState(false)
   const [prUrl, setPrUrl] = useState<string | null>(null)
+  if (!agent) return null
   const hasPreview = !!agent.result?.previewUrl
   // Default to preview view if available — that's the wow moment
   const [view, setView] = useState<'preview' | 'code'>(
@@ -440,7 +496,7 @@ function ComparePanel({
                 </span>
               </div>
               <div className="text-[11px] font-mono text-slate-600 mt-0.5">
-                Candidate #{PERSONAS.findIndex((p) => p.id === selectedPersona) + 1} / 5
+                Candidate #{candidateIndex} / {teamSize}
               </div>
             </div>
           </div>

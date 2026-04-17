@@ -29,7 +29,7 @@ export async function runAgent(
       ...p,
       agents: {
         ...p.agents,
-        [persona.id]: { ...p.agents[persona.id], ...state },
+        [persona.id]: { ...(p.agents[persona.id] ?? {}), ...state },
       },
     }))
   }
