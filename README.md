@@ -2,127 +2,207 @@
 
 **Choose your patch. Skip the vibe.**
 
-Five parallel AI agents implement your GitHub issue — each with a different philosophy. You pick the winner.
+Paste a GitHub issue URL → 5 AI agents implement it **in parallel** inside isolated Daytona sandboxes, each with a distinct engineering philosophy. You inspect the live previews side-by-side and pick the one that matches your taste. One click turns it into a PR.
 
-Built in 5 hours at AI Builders Berlin AI Hackday.
+Built in one hackday at **AI Builders Berlin**.
 
----
-
-## 🚀 Setup (15 minutes, at the event)
-
-### 1. Paste this skeleton into your working directory
-
-```bash
-# This repo is your skeleton. Don't push anything until 10:30 at the event.
-cd patchparty
-```
-
-### 2. Get the three API keys
-
-**Anthropic** — https://console.anthropic.com → Settings → API Keys → new key
-**Daytona** — https://app.daytona.io → sign up (GitHub login) → Dashboard → API Keys → new key
-**GitHub Personal Access Token** — https://github.com/settings/tokens → Generate new token (classic) → scopes: `repo`, `workflow`
-
-### 3. Fill in `.env.local`
-
-```bash
-cp .env.example .env.local
-# edit .env.local with your keys
-```
-
-### 4. Install + run
-
-```bash
-npm install
-npm run dev
-# open http://localhost:3000
-```
-
-### 5. Test the happy path
-
-- Pick a small issue from one of your public repos (or create one: "Add a hello endpoint")
-- Paste URL
-- Watch 5 agents work
-- Pick winner → PR gets created
-
-### 6. Deploy to Railway
-
-```bash
-# New Railway project → from GitHub repo (after you push at 10:30)
-# Set env vars in Railway dashboard
-# Deploy
-```
+- **Live app:** https://patchparty-production.up.railway.app
+- **Source:** https://github.com/ThePyth0nKid/patchPartyDaytonaLovable
+- **Demo issues:** see [`demo-issues.md`](./demo-issues.md)
 
 ---
 
-## 🏗️ Architecture
+## Why it exists
+
+46 % of production code is AI-generated, bugs are up 1.7×, and *every* Claude gives the same answer to the same prompt. "Trust one AI" is a monoculture problem.
+
+PatchParty turns that into a **choice**: five opinionated personas, five different solutions, one you. The AI writes, the human selects.
+
+---
+
+## The 5 personas
+
+Each is a distinct philosophy, not just a prompt tweak. They live in [`src/lib/personas/index.ts`](./src/lib/personas/index.ts) — the soul of the product.
+
+| | Persona | Philosophy | Typical output |
+|---|---|---|---|
+| 🔨 | **Hackfix** | Ship it. | Minimal diff, no tests, no comments |
+| 🧱 | **Craftsman** | Make it proud. | Typed, tested, documented, edge cases |
+| 🎨 | **UX-King** | Users first. | Loading/error states, a11y, micro-animations |
+| 🛡 | **Defender** | What if attacked? | Input validation, rate-limits, audit-log |
+| 💡 | **Innovator** | What if we went further? | Base impl + 2 bonus features |
+
+---
+
+## How one "party" works
+
+```
+┌─────────┐     paste issue     ┌────────────────┐
+│  user   │ ──────────────────▶ │  /api/party/   │
+└─────────┘                     │     start      │
+      ▲                         └────────┬───────┘
+      │ SSE (live status)                │
+      │                                  │  fires 5 runAgent() in parallel
+      │                                  ▼
+┌─────┴─────┐  ┌───────────────────────────────────┐
+│ /party/id │  │  Per persona:                     │
+│  (React)  │  │  ┌──────────────────────────────┐ │
+└───────────┘  │  │  Daytona sandbox (new)       │ │
+      │        │  │  ├─ git clone repo           │ │
+      │ click  │  │  ├─ read code for context    │ │
+      │        │  │  ├─ Claude Opus 4.7 w/persona│ │
+      │        │  │  ├─ write files              │ │
+      │        │  │  ├─ npm install + `dev`      │ │
+      │        │  │  ├─ getPreviewLink(3000)     │ │
+      │        │  │  └─ git push branch          │ │
+      │        │  └──────────────────────────────┘ │
+      ▼        └───────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│ Compare modal — iframe → /api/preview proxy       │
+│   └─ strips Daytona warning, rewrites paths,      │
+│      stubs Vite HMR → no-flicker live preview     │
+└───────────────────────────────────────────────────┘
+      │
+      │ "Pick this one"
+      ▼
+┌────────────┐
+│ /api/party/│   octokit.pulls.create({ head: branch })
+│   /pr      │ ─────────────────────────────────────▶  PR on target repo
+└────────────┘
+```
+
+---
+
+## Architecture
 
 ```
 src/
 ├── app/
-│   ├── page.tsx                  # Home (input URL)
-│   ├── party/[id]/page.tsx       # Live party view + compare
+│   ├── page.tsx                          # Home (paste URL)
+│   ├── party/[id]/page.tsx               # Live party view + compare modal
 │   └── api/
-│       └── party/
-│           ├── start/route.ts    # Creates party, spawns 5 agents
-│           ├── [id]/stream/      # SSE live updates
-│           └── [id]/pr/          # Create PR on GitHub
+│       ├── party/
+│       │   ├── start/route.ts            # create party, spawn 5 agents
+│       │   ├── [id]/stream/route.ts      # SSE status updates
+│       │   └── [id]/pr/route.ts          # create PR via Octokit
+│       ├── preview/
+│       │   └── [target]/[[...path]]/     # stateless proxy to Daytona sandboxes
+│       └── sandbox/cleanup/route.ts      # deletes sandboxes on tab close
 └── lib/
-    ├── personas/index.ts         # The 5 personality definitions (THE CORE!)
-    ├── agent.ts                  # Daytona + Claude per sandbox
-    ├── store.ts                  # In-memory party state + pub/sub
-    ├── types.ts                  # Party, AgentState, events
-    └── github/index.ts           # Octokit helpers
+    ├── personas/index.ts                 # THE CORE — 5 philosophies + prompts
+    ├── agent.ts                          # Daytona + Claude orchestration
+    ├── store.ts                          # in-memory party state + pub/sub
+    ├── types.ts                          # shared types
+    └── github/index.ts                   # Octokit helpers (fetch issue, create PR)
 ```
 
 ### Key design choices
 
-- **No database.** In-memory store. 5h hackathon reality.
-- **SSE not WebSocket.** Simpler, reliable, works through any proxy.
-- **One Next.js app.** Single Railway deploy, no CORS hell.
-- **GitHub PAT not OAuth.** Saves ~45 minutes of auth-flow work. Swap post-hackathon.
-- **In-memory is fine because parties are ephemeral.** Post-hackathon → Redis.
+- **No database.** In-memory store, parties are ephemeral. Post-hackathon → Redis.
+- **SSE, not WebSocket.** Simpler, proxy-friendly, works on Railway out of the box.
+- **One Next.js app.** Single Railway deploy, no CORS hell, no service-mesh ceremony.
+- **GitHub PAT, not OAuth.** Saved ~45 min of auth-flow work. Swap later.
+- **Stateless preview proxy.** The iframe URL encodes `{sandboxUrl, token}` in base64url — no server-side lookup, survives container restarts, load balancers, anything.
 
 ---
 
-## 🎭 The 5 Personas
+## The preview-proxy quirk (most interesting 30 minutes of this build)
 
-These are the heart. Each is a distinct **philosophy**, not just a prompt tweak.
+Daytona gives each sandbox a URL like `https://3000-<sandboxId>.daytonaproxy01.net`. Embedding that directly in an iframe breaks in *five* ways. The route at `src/app/api/preview/[target]/[[...path]]/route.ts` fixes each:
 
-| Persona | Philosophy | Output Character |
+1. **Interstitial warning page.** Daytona shows a "you are about to visit" splash by default. Proxy sets header `x-daytona-skip-preview-warning: true` — gone.
+2. **Browser can't set custom headers on iframes.** So the token (`x-daytona-preview-token`) gets encoded into the proxy path by the client and attached server-side.
+3. **Absolute path resolution.** Vite dev HTML contains `<script src="/@vite/client">`. In an iframe at `patchparty.railway.app/api/preview/...`, that `/…` resolves to our domain, not the sandbox. The proxy rewrites every `"/foo"` / `'/foo'` / `` `/foo` `` in HTML, JS, and CSS bodies to `"/api/preview/<target>/foo"`.
+4. **Wrong content-types.** Daytona's edge returns `text/html` for `.svg`, `/@vite/client`, etc. The proxy fixes by path-extension, **and** body-sniffs (`import …` prefix → `application/javascript`) because Vite serves CSS as JS modules.
+5. **HMR reload loop.** Vite's client opens a WebSocket to the page origin; Railway has no WS endpoint; the client gives up, polls, thinks the server came back, calls `location.reload()` → iframe flickers forever. The proxy short-circuits `/@vite/client` with a stub that exports every name react-refresh and CSS modules import, but none of them do anything.
+
+If you're ever embedding Daytona sandboxes in an iframe on your own domain, start from that route file.
+
+---
+
+## Tech stack
+
+- **Next.js 15** (App Router, Server Components, Route Handlers, SSE)
+- **React 19 RC** (needs `legacy-peer-deps=true` for `@monaco-editor/react`)
+- **Claude Opus 4.7** for code generation · **Claude Haiku 4.5** for summaries
+- **Daytona SDK 0.20.2** for sandboxes
+- **Octokit** for GitHub (issues + PRs)
+- **Tailwind CSS** for styling
+- **Railway** for hosting · **Cloudflare** for the custom domain (`patchparty.xyz`, optional)
+
+---
+
+## Local setup
+
+```bash
+# 1. Clone
+git clone https://github.com/ThePyth0nKid/patchPartyDaytonaLovable
+cd patchPartyDaytonaLovable
+
+# 2. Env vars — copy .env.example and fill in
+cp .env.example .env.local
+# ANTHROPIC_API_KEY, DAYTONA_API_KEY, GITHUB_TOKEN, DAYTONA_TARGET=eu
+
+# 3. Install + run
+npm install
+npm run dev
+# → http://localhost:3000
+```
+
+### Required env vars
+
+| Var | Where to get | Notes |
 |---|---|---|
-| 🔨 Hackfix | Ship it. | Minimal diff, no tests |
-| 🧱 Craftsman | Make it proud. | Typed, tested, documented |
-| 🎨 UX-King | Users first. | Polish, a11y, edge cases |
-| 🛡 Defender | What if attacked? | Validated, logged, secured |
-| 💡 Innovator | What if we went further? | Base + 2 bonus features |
-
-Edit them in `src/lib/personas/index.ts` — that's where the product lives.
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | Claude API key |
+| `DAYTONA_API_KEY` | [app.daytona.io](https://app.daytona.io) → API Keys | Sandbox provisioning |
+| `DAYTONA_TARGET` | `eu` / `us` / `asia` | Must match your Daytona org region |
+| `GITHUB_TOKEN` | [github.com/settings/tokens](https://github.com/settings/tokens/new) | Classic PAT, scope `repo` |
+| `NEXT_PUBLIC_APP_URL` | set after first deploy | Only public-facing env var |
 
 ---
 
-## ⚠️ Known Gaps (things to acknowledge in Q&A, not hide)
+## Deployment (Railway)
 
-- **Branch is in sandbox, not pushed.** The "Create PR" button assumes the branch exists on GitHub. For hackathon: you can demo the full flow including PR creation by pushing from the sandbox first (not implemented in skeleton). Alternative: demo shows the diffs, PR-creation is "coming in v2".
-- **No test-runner.** Agents commit without running tests. Add `npm test` in sandbox.exec for full Craftsman experience.
-- **No codebase-semantic-context.** Agents see first 10 files, not the ones most relevant to the issue. Post-hackathon: embeddings + RAG.
-- **Claude Opus 4.7 only.** No model-mix for diversity. Could try mixing Sonnet for Hackfix (faster) and Opus for Craftsman.
+Currently deployed via CLI:
 
-Owning these in the pitch shows maturity. Don't pretend they don't exist.
+```bash
+npm install -g @railway/cli
+railway login
+railway init --name patchparty --workspace "<your-workspace>"
+railway link
+# set env vars in dashboard or:
+railway variables --set "ANTHROPIC_API_KEY=..." --skip-deploys
+# ...etc for the other 4 vars...
+railway up --detach
+railway domain                  # generate *.up.railway.app
+```
 
----
-
-## 🎤 Pitch-Script Reference
-
-0-12s: Hook (stats: 46% AI code, 1.7× bugs, Anthropic's own review-tool)
-12-25s: Solution (one sentence)
-25-70s: Live demo (paste issue, watch 5 agents, pick one)
-70-90s: Vision + URL + thank
-
-See `/docs/patchparty_prd.md` for full script.
+To wire auto-deploy-on-push: Railway dashboard → service → **Settings → Source → Connect Repo**. (No CLI command for this yet.)
 
 ---
 
-## 📜 License
+## Known gaps (owned, not hidden)
 
-MIT — built fast at the Factory Berlin.
+- **TS checks disabled in production build** (`next.config.js`). Daytona SDK 0.20 → 0.167 is 147 minor versions of API drift; fixing every mismatch was out of scope for the hackday. `agent.ts` works at runtime; types don't match.
+- **SDK is pinned to 0.20.2.** Upgrading unlocks signed preview URLs and would eliminate most of the proxy acrobatics — but breaks the agent in ways we didn't want to debug under a pitch deadline.
+- **"Create PR" uses sandbox push.** `git push` from inside the Daytona sandbox using the GitHub PAT. Works for public target repos where the token owner has push access. No conflict resolution yet.
+- **No codebase-semantic-context.** Agents see the first N files, not the ones most relevant to the issue. Post-hackathon: embeddings + RAG.
+- **In-memory party store.** Survives within one Railway container. Container restart → orphaned sandboxes (they auto-stop after 15 min).
+- **Only tested against Vite/React repos.** The proxy rewriting assumes Vite dev-server conventions. Next.js / Astro / SvelteKit dev servers will probably need tweaks.
+
+---
+
+## Pitch flow (90 seconds)
+
+1. **0-12s · Hook** — "46 % of production code is AI-generated. Bugs are up 1.7×. Every Claude gives the same answer. That's a monoculture."
+2. **12-25s · Solution** — "PatchParty runs five opinionated engineers in parallel. You see what they each build, live. You pick."
+3. **25-70s · Live demo** — paste an issue, watch five cards go green, open two side-by-side, click "Pick UX-King".
+4. **70-90s · Close** — PR URL on screen. "Not replacing judgement. Restoring it. [patchparty.xyz](https://patchparty.xyz)."
+
+Full list of pre-prepared demo issues: [`demo-issues.md`](./demo-issues.md).
+
+---
+
+## License
+
+MIT. Built fast at AI Builders Berlin.

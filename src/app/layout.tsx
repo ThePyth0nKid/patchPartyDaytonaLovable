@@ -15,9 +15,18 @@ const jetbrains = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'PatchParty — Choose your patch, skip the vibe',
+  title: 'PatchParty — Five patches. One click. Zero AI slop.',
   description:
-    'Five parallel AI agents implement your GitHub issue. You pick the winner.',
+    'Drop a GitHub issue, get five adversarial Claude agents writing five pull requests in parallel Daytona sandboxes. You pick the one you would ship.',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+  },
+  openGraph: {
+    title: 'PatchParty — Five patches. One click. Zero AI slop.',
+    description:
+      'Five adversarial Claude agents race to implement your GitHub issue. You pick the winner. One click to PR.',
+    type: 'website',
+  },
 }
 
 export default function RootLayout({
