@@ -48,6 +48,33 @@ export interface AgentState {
   error?: string
 }
 
+export type IssueType =
+  | 'frontend'
+  | 'backend'
+  | 'fullstack'
+  | 'infrastructure'
+  | 'bug-fix'
+
+export type IssueConcern =
+  | 'ui'
+  | 'accessibility'
+  | 'security'
+  | 'performance'
+  | 'data'
+  | 'api'
+  | 'styling'
+  | 'testing'
+
+export interface PartyClassification {
+  type: IssueType
+  concerns: IssueConcern[]
+  complexity: 'simple' | 'medium' | 'complex'
+  /** One-sentence human-readable reason for the selection — surfaced in UI. */
+  reason: string
+  /** Which personas the orchestrator chose, and why this shape fits the issue. */
+  selectedPersonas: PersonaId[]
+}
+
 export interface Party {
   id: string
   issueUrl: string
@@ -56,7 +83,8 @@ export interface Party {
   repoOwner: string
   repoName: string
   createdAt: number
-  agents: Record<PersonaId, AgentState>
+  classification?: PartyClassification
+  agents: Partial<Record<PersonaId, AgentState>>
 }
 
 export type PartyEvent =
