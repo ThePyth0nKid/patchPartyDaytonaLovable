@@ -1,12 +1,34 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useRef, useState } from 'react'
 import { PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent } from '@/lib/types'
 
 function encodePreviewTarget(url: string, token?: string): string {
   const json = JSON.stringify(token ? { url, token } : { url })
   return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function collectSandboxIds(party: Party | null): string[] {
+  if (!party) return []
+  return Object.values(party.agents)
+    .map((a) => a.result?.sandboxId)
+    .filter((x): x is string => !!x)
+}
+
+function cleanupSandboxes(sandboxIds: string[]) {
+  if (sandboxIds.length === 0) return
+  const data = new Blob([JSON.stringify({ sandboxIds })], { type: 'application/json' })
+  try {
+    navigator.sendBeacon('/api/sandbox/cleanup', data)
+  } catch {
+    fetch('/api/sandbox/cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sandboxIds }),
+      keepalive: true,
+    }).catch(() => {})
+  }
 }
 
 export default function PartyPage({
@@ -18,6 +40,22 @@ export default function PartyPage({
   const [party, setParty] = useState<Party | null>(null)
   const [connected, setConnected] = useState(false)
   const [selectedPersona, setSelectedPersona] = useState<PersonaId | null>(null)
+  const partyRef = useRef<Party | null>(null)
+
+  useEffect(() => {
+    partyRef.current = party
+  }, [party])
+
+  useEffect(() => {
+    const handleUnload = () => cleanupSandboxes(collectSandboxIds(partyRef.current))
+    window.addEventListener('beforeunload', handleUnload)
+    window.addEventListener('pagehide', handleUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload)
+      window.removeEventListener('pagehide', handleUnload)
+      cleanupSandboxes(collectSandboxIds(partyRef.current))
+    }
+  }, [])
 
   useEffect(() => {
     const es = new EventSource(`/api/party/${id}/stream`)
