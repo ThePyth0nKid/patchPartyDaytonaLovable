@@ -1,0 +1,19 @@
+/* shadcn/ui Theme — extracted from https://linear.app */
+/* Paste into your globals.css */
+
+@layer base {
+  :root {
+    --background: 210 11% 4%;
+    --foreground: 180 7% 97%;
+    --primary: 218 21% 85%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 315 85% 79%;
+    --secondary-foreground: 0 0% 0%;
+    --accent: 210 11% 4%;
+    --accent-foreground: 0 0% 100%;
+    --muted: 180 5% 7%;
+    --muted-foreground: 180 7% 97%;
+    --border: 223 9% 15%;
+    --radius: 7px;
+  }
+}

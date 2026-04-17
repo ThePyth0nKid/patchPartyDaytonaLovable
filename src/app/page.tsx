@@ -35,34 +35,47 @@ export default function HomePage() {
     }
   }
 
+  const personaAccents: Record<string, string> = {
+    hackfix: '#FF6B35',
+    craftsman: '#14B8A6',
+    'ux-king': '#E879F9',
+    defender: '#60A5FA',
+    innovator: '#A78BFA',
+  }
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-950 text-white">
-      <div className="max-w-3xl w-full space-y-8">
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-950 text-slate-50">
+      <div className="max-w-3xl w-full space-y-10">
         {/* Hero */}
-        <div className="text-center space-y-4">
-          <div className="flex justify-center gap-3 text-4xl">
+        <div className="text-center space-y-5">
+          <div className="flex justify-center gap-4 text-4xl">
             {PERSONAS.map((p) => (
               <span
                 key={p.id}
-                className="animate-pulse-slow"
-                style={{ animationDelay: `${PERSONAS.indexOf(p) * 0.3}s` }}
+                className="animate-pulse-slow drop-shadow-[0_0_12px_var(--glow)]"
+                style={{
+                  animationDelay: `${PERSONAS.indexOf(p) * 0.3}s`,
+                  ['--glow' as string]: personaAccents[p.color],
+                }}
               >
                 {p.icon}
               </span>
             ))}
           </div>
-          <h1 className="text-5xl font-bold tracking-tight">PatchParty</h1>
-          <p className="text-xl text-slate-400">
+          <h1 className="text-6xl font-semibold tracking-tight bg-gradient-to-b from-slate-50 to-slate-400 bg-clip-text text-transparent">
+            PatchParty
+          </h1>
+          <p className="text-xl text-slate-300">
             Choose your patch. Skip the vibe.
           </p>
-          <p className="text-sm text-slate-500 max-w-xl mx-auto">
+          <p className="text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
             Five parallel AI agents implement your GitHub issue — each with a
             different philosophy. You pick the winner. One click to PR.
           </p>
         </div>
 
         {/* Input */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div className="bg-slate-900/60 backdrop-blur border border-slate-800 rounded-[7px] p-6 space-y-4 shadow-linear-xl">
           <label className="block text-sm font-medium text-slate-300">
             Paste a GitHub issue URL
           </label>
@@ -73,13 +86,13 @@ export default function HomePage() {
             onChange={(e) => setIssueUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && startParty()}
             disabled={loading}
-            className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+            className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-[7px] text-slate-50 placeholder-slate-600 font-mono text-sm focus:outline-none focus:border-[#A78BFA] focus:ring-1 focus:ring-[#A78BFA]/40 transition-all ease-linear duration-200"
           />
           {error && <div className="text-red-400 text-sm">{error}</div>}
           <button
             onClick={startParty}
             disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="w-full py-3 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 rounded-[7px] font-semibold text-black disabled:opacity-50 disabled:cursor-not-allowed transition-all ease-linear duration-200"
           >
             {loading ? 'Starting party...' : "Let's Party 🎉"}
           </button>
@@ -90,10 +103,17 @@ export default function HomePage() {
           {PERSONAS.map((p) => (
             <div
               key={p.id}
-              className="text-center p-3 bg-slate-900 border border-slate-800 rounded-lg"
+              className="group text-center p-3 bg-slate-900/60 backdrop-blur border border-slate-800 rounded-[7px] transition-all ease-linear duration-200 hover:-translate-y-0.5"
+              style={{
+                ['--glow' as string]: personaAccents[p.color],
+              }}
             >
-              <div className="text-2xl mb-1">{p.icon}</div>
-              <div className="text-xs font-semibold">{p.name}</div>
+              <div className="text-2xl mb-1 transition-[filter] duration-200 group-hover:drop-shadow-[0_0_10px_var(--glow)]">
+                {p.icon}
+              </div>
+              <div className="text-xs font-semibold" style={{ color: personaAccents[p.color] }}>
+                {p.name}
+              </div>
               <div className="text-[10px] text-slate-500 italic">
                 {p.tagline}
               </div>
