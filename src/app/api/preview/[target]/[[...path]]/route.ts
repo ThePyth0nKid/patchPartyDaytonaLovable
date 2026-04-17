@@ -81,6 +81,42 @@ function rewriteCss(body: string, prefix: string): string {
   return body.replace(/url\((['"]?)\/(?!\/)/g, `url($1${prefix}/`)
 }
 
+// Stub replacement for Vite's @vite/client. The real one opens a WebSocket to
+// the origin for HMR; when we serve through our proxy the origin is our Next
+// server (no WS) so the client flips into "connection lost" → polls → triggers
+// `location.reload()` the moment polling "succeeds" against Railway's edge,
+// which causes the iframe to flicker between blank and rendered. Disabling HMR
+// here keeps the preview stable.
+const VITE_CLIENT_STUB = `// Proxy-injected stub: Vite HMR disabled for the PatchParty iframe preview.
+export function createHotContext() {
+  return {
+    accept() {}, acceptExports() {}, dispose() {}, prune() {}, decline() {},
+    invalidate() {}, on() {}, off() {}, send() {},
+    data: {},
+  };
+}
+export function updateStyle(id, content) {
+  try {
+    const sel = 'style[data-vite-dev-id="' + id + '"]';
+    let el = document.querySelector(sel);
+    if (!el) {
+      el = document.createElement('style');
+      el.setAttribute('data-vite-dev-id', id);
+      document.head.appendChild(el);
+    }
+    el.textContent = content;
+  } catch (_) {}
+}
+export function removeStyle(id) {
+  try {
+    const el = document.querySelector('style[data-vite-dev-id="' + id + '"]');
+    if (el) el.remove();
+  } catch (_) {}
+}
+export const ErrorOverlay = class { constructor(){} close(){} };
+// Export nothing else — any unsupported usage is a no-op via destructuring.
+`
+
 async function proxy(
   req: NextRequest,
   { params }: { params: Promise<{ target: string; path?: string[] }> },
@@ -90,6 +126,19 @@ async function proxy(
   if (!decoded) return new Response('Invalid target', { status: 400 })
 
   const subPath = path && path.length ? '/' + path.join('/') : '/'
+
+  // Short-circuit Vite's HMR client to a no-op so the iframe doesn't flicker
+  // from WebSocket-failure reload loops.
+  if (subPath === '/@vite/client') {
+    return new Response(VITE_CLIENT_STUB, {
+      status: 200,
+      headers: {
+        'content-type': 'application/javascript; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    })
+  }
+
   const upstream =
     decoded.url.replace(/\/$/, '') + subPath + (req.nextUrl.search || '')
 
