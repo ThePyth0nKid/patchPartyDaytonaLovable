@@ -13,6 +13,95 @@ const PERSONA_ACCENTS: Record<string, string> = {
   innovator: '#A78BFA',
 }
 
+function Spinner({ className = '', color = 'currentColor' }: { className?: string; color?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label="Loading"
+    >
+      <circle cx="12" cy="12" r="9" stroke={color} strokeOpacity="0.2" strokeWidth="2" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PreviewFrame({
+  src,
+  title,
+  accent,
+  icon,
+}: {
+  src: string
+  title: string
+  accent: string
+  icon: string
+}) {
+  const [loaded, setLoaded] = useState(false)
+  const [timedOut, setTimedOut] = useState(false)
+
+  useEffect(() => {
+    setLoaded(false)
+    setTimedOut(false)
+    const t = setTimeout(() => setTimedOut(true), 20000)
+    return () => clearTimeout(t)
+  }, [src])
+
+  return (
+    <div className="relative bg-slate-950 rounded-[7px] overflow-hidden border border-slate-800 h-[600px]">
+      <iframe
+        src={src}
+        title={title}
+        onLoad={() => setLoaded(true)}
+        className={`w-full h-full bg-white transition-opacity duration-500 ease-linear ${
+          loaded ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+      {!loaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-slate-950">
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `radial-gradient(ellipse 60% 40% at 50% 50%, ${accent}25, transparent 60%)`,
+            }}
+          />
+          <span
+            className="text-5xl relative animate-pulse-slow"
+            style={{ filter: `drop-shadow(0 0 20px ${accent})` }}
+          >
+            {icon}
+          </span>
+          <div className="relative flex items-center gap-2 text-[12px] font-mono uppercase tracking-[0.2em] text-slate-200">
+            <Spinner className="w-3.5 h-3.5" color={accent} />
+            {timedOut ? 'Sandbox taking its time…' : 'Warming up sandbox'}
+          </div>
+          <div className="relative flex gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="h-1 w-6 rounded-full animate-pulse"
+                style={{
+                  background: accent,
+                  opacity: 0.25,
+                  animationDelay: `${i * 0.15}s`,
+                }}
+              />
+            ))}
+          </div>
+          {timedOut && (
+            <div className="relative text-[11px] font-mono text-slate-400 max-w-xs text-center px-4">
+              Preview takes ~15–30s on first load — Next.js needs to install deps inside the sandbox.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BrandMark() {
   return (
     <span
@@ -187,33 +276,33 @@ export default function PartyPage({
       <section className="border-b border-slate-800/60">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
+            <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA] drop-shadow-[0_0_8px_#A78BFA80]">
               Party in progress
             </span>
-            <span className="h-px flex-1 bg-slate-800" />
-            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
+            <span className="h-px flex-1 bg-gradient-to-r from-[#A78BFA40] via-slate-700 to-transparent" />
+            <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-slate-200">
               {doneCount} / {teamSize} done
             </span>
           </div>
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
             <div className="min-w-0">
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-[-0.02em] truncate">
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-[-0.02em] truncate text-slate-50">
                 {party.issueTitle}
               </h1>
               <a
                 href={party.issueUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-[12px] font-mono text-slate-500 hover:text-slate-300 transition-colors"
+                className="mt-1.5 inline-flex items-center gap-1.5 text-[12px] font-mono text-slate-300 hover:text-slate-50 transition-colors"
               >
                 {party.repoOwner}/{party.repoName}
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
             <div className="w-full md:w-72">
-              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]">
                 <div
-                  className="h-full bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] transition-all duration-700 ease-linear"
+                  className="h-full bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] transition-all duration-700 ease-linear shadow-[0_0_12px_rgba(167,139,250,0.6)]"
                   style={{ width: `${(doneCount / teamSize) * 100}%` }}
                 />
               </div>
@@ -226,26 +315,26 @@ export default function PartyPage({
       {party.classification && teamPersonas.length > 0 && (
         <section className="border-b border-slate-800/60">
           <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
-            <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-2 text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA]">
+              <Sparkles className="w-3.5 h-3.5 drop-shadow-[0_0_6px_#A78BFA]" />
               Orchestrator
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-300">
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-800 font-mono">
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-100">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700 font-mono font-medium">
                 {party.classification.type}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-800 font-mono">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700 font-mono font-medium">
                 {party.classification.complexity}
               </span>
               {party.classification.concerns.slice(0, 3).map((c) => (
                 <span
                   key={c}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900/70 border border-slate-800 font-mono"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700 font-mono font-medium"
                 >
                   {c}
                 </span>
               ))}
-              <span className="text-slate-500 italic hidden md:inline">
+              <span className="text-slate-300 italic hidden md:inline">
                 · {party.classification.reason}
               </span>
             </div>
@@ -255,6 +344,7 @@ export default function PartyPage({
                   key={p.id}
                   title={`${p.name} — ${p.tagline}`}
                   className="text-xl leading-none"
+                  style={{ filter: `drop-shadow(0 0 6px ${PERSONA_ACCENTS[p.color]})` }}
                 >
                   {p.icon}
                 </span>
@@ -262,7 +352,7 @@ export default function PartyPage({
             </div>
           </div>
           {/* Classifier reason on small screens */}
-          <div className="md:hidden max-w-7xl mx-auto px-6 pb-3 text-[12px] text-slate-500 italic">
+          <div className="md:hidden max-w-7xl mx-auto px-6 pb-3 text-[12px] text-slate-300 italic">
             {party.classification.reason}
           </div>
         </section>
@@ -323,68 +413,70 @@ function AgentCard({
     <div
       onClick={onSelect}
       className={`
-        group relative bg-slate-900/60 backdrop-blur border rounded-[7px] p-5 transition-all duration-200 ease-linear overflow-hidden
-        ${selected ? 'border-transparent' : 'border-slate-800 hover:border-slate-700'}
-        ${isDone ? 'cursor-pointer hover:-translate-y-0.5' : ''}
+        group relative bg-slate-900/70 backdrop-blur border rounded-[7px] p-5 transition-all duration-200 ease-linear overflow-hidden
+        ${selected ? 'border-transparent' : 'border-slate-700/80 hover:border-slate-600'}
+        ${isDone ? 'cursor-pointer hover:-translate-y-1' : ''}
       `}
       style={{
-        boxShadow: selected ? `0 0 0 1px ${accent}, 0 0 32px -8px ${accent}` : undefined,
+        boxShadow: selected
+          ? `0 0 0 1px ${accent}, 0 0 48px -8px ${accent}, inset 0 1px 0 rgba(255,255,255,0.04)`
+          : 'inset 0 1px 0 rgba(255,255,255,0.03)',
         ['--glow' as string]: accent,
       }}
     >
       {/* accent hairline */}
       <div
-        className={`absolute inset-x-0 top-0 h-px transition-opacity ${selected ? 'opacity-100' : 'opacity-40'}`}
+        className="absolute inset-x-0 top-0 h-px"
         style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
       />
+      {/* hover orb */}
+      <div
+        aria-hidden
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+        style={{ background: `radial-gradient(circle at 50% 0%, ${accent}22, transparent 60%)` }}
+      />
 
-      <div className="flex items-start gap-3 mb-4">
+      <div className="flex items-start gap-3 mb-4 relative">
         <span
           className={`text-2xl leading-none transition-[filter] duration-200 ${isRunning ? 'animate-pulse' : ''}`}
-          style={{ filter: isRunning || selected ? `drop-shadow(0 0 10px ${accent})` : undefined }}
+          style={{ filter: `drop-shadow(0 0 ${isRunning || selected ? 14 : 6}px ${accent})` }}
         >
           {persona.icon}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-[14px] tracking-[-0.01em]" style={{ color: accent }}>
+          <div
+            className="font-semibold text-[14px] tracking-[-0.01em]"
+            style={{ color: accent, textShadow: `0 0 20px ${accent}40` }}
+          >
             {persona.name}
           </div>
-          <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-slate-500 mt-0.5">
+          <div className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-slate-300 mt-0.5">
             {persona.tagline}
           </div>
         </div>
         {hasPreview && (
-          <span className="text-[9px] font-mono uppercase tracking-[0.15em] px-2 py-0.5 bg-[#14B8A6]/10 text-[#14B8A6] border border-[#14B8A6]/30 rounded-full">
+          <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.15em] px-2 py-0.5 bg-[#14B8A6]/15 text-[#14B8A6] border border-[#14B8A6]/40 rounded-full shadow-[0_0_12px_-2px_#14B8A6]">
             Live
           </span>
         )}
       </div>
 
       {/* status strip */}
-      <div className="flex items-start gap-2 text-[12px] mb-2">
+      <div className="flex items-start gap-2 text-[12px] mb-2 relative">
         {isError ? (
-          <AlertCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+          <AlertCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0 drop-shadow-[0_0_6px_#f87171]" />
         ) : isDone ? (
-          <CheckCircle2 className="w-3.5 h-3.5 text-[#14B8A6] mt-0.5 shrink-0" />
+          <CheckCircle2 className="w-3.5 h-3.5 text-[#14B8A6] mt-0.5 shrink-0 drop-shadow-[0_0_6px_#14B8A6]" />
+        ) : isRunning ? (
+          <Spinner className="w-3.5 h-3.5 mt-0.5 shrink-0" color={accent} />
         ) : (
-          <span
-            className={`relative flex h-1.5 w-1.5 mt-1.5 shrink-0 ${isRunning ? '' : 'opacity-50'}`}
-          >
-            {isRunning && (
-              <span
-                className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                style={{ background: accent }}
-              />
-            )}
-            <span
-              className="relative inline-flex rounded-full h-1.5 w-1.5"
-              style={{ background: accent }}
-            />
+          <span className="relative flex h-1.5 w-1.5 mt-1.5 shrink-0 opacity-60">
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: accent }} />
           </span>
         )}
         <span
           className={
-            isError ? 'text-red-400' : isDone ? 'text-slate-300' : 'text-slate-400'
+            isError ? 'text-red-300' : isDone ? 'text-slate-100' : 'text-slate-200'
           }
         >
           {agent.message}
@@ -392,20 +484,20 @@ function AgentCard({
       </div>
 
       {agent.stats.filesChanged > 0 && (
-        <div className="text-[11px] font-mono text-slate-500">
-          {agent.stats.filesChanged} files · +{agent.stats.linesAdded} / −{agent.stats.linesRemoved}
+        <div className="text-[11px] font-mono text-slate-400 relative">
+          {agent.stats.filesChanged} files · <span className="text-[#14B8A6]">+{agent.stats.linesAdded}</span> / <span className="text-red-300">−{agent.stats.linesRemoved}</span>
         </div>
       )}
 
       {isDone && agent.result?.summary && (
-        <div className="mt-4 pt-4 border-t border-slate-800 text-[12px] text-slate-400 leading-relaxed line-clamp-3">
+        <div className="mt-4 pt-4 border-t border-slate-800 text-[12px] text-slate-200 leading-relaxed line-clamp-3 relative">
           {agent.result.summary}
         </div>
       )}
 
       {isDone && (
         <div
-          className="mt-4 pt-3 border-t border-slate-800 text-[11px] font-mono uppercase tracking-[0.18em] flex items-center justify-between"
+          className="mt-4 pt-3 border-t border-slate-800 text-[11px] font-mono font-semibold uppercase tracking-[0.18em] flex items-center justify-between relative"
           style={{ color: accent }}
         >
           <span>Inspect</span>
@@ -482,27 +574,30 @@ function ComparePanel({
           <div className="flex items-center gap-4">
             <span
               className="text-3xl"
-              style={{ filter: `drop-shadow(0 0 14px ${accent})` }}
+              style={{ filter: `drop-shadow(0 0 18px ${accent})` }}
             >
               {persona.icon}
             </span>
             <div>
               <div className="flex items-baseline gap-2">
-                <div className="text-xl font-semibold tracking-[-0.01em]" style={{ color: accent }}>
+                <div
+                  className="text-xl font-semibold tracking-[-0.01em]"
+                  style={{ color: accent, textShadow: `0 0 24px ${accent}60` }}
+                >
                   {persona.name}
                 </div>
-                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-slate-500">
+                <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-200">
                   {persona.tagline}
                 </span>
               </div>
-              <div className="text-[11px] font-mono text-slate-600 mt-0.5">
+              <div className="text-[11px] font-mono text-slate-400 mt-0.5">
                 Candidate #{candidateIndex} / {teamSize}
               </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-[7px] border border-slate-800 text-slate-500 hover:text-slate-50 hover:border-slate-700 transition-colors"
+            className="p-2 rounded-[7px] border border-slate-700 text-slate-300 hover:text-slate-50 hover:border-slate-600 hover:bg-slate-800/50 transition-colors"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
@@ -512,13 +607,13 @@ function ComparePanel({
         {/* View Toggle */}
         {hasPreview && (
           <div className="px-6 pt-4 flex items-center gap-3 flex-wrap">
-            <div className="flex bg-slate-950 border border-slate-800 rounded-[7px] p-0.5">
+            <div className="flex bg-slate-950 border border-slate-700 rounded-[7px] p-0.5">
               <button
                 onClick={() => setView('preview')}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-[5px] transition-colors ease-linear ${
                   view === 'preview'
-                    ? 'bg-slate-50 text-slate-950 font-medium'
-                    : 'text-slate-400 hover:text-slate-50'
+                    ? 'bg-slate-50 text-slate-950 font-semibold'
+                    : 'text-slate-200 hover:text-slate-50 hover:bg-slate-800/50'
                 }`}
               >
                 <Monitor className="w-3.5 h-3.5" />
@@ -528,8 +623,8 @@ function ComparePanel({
                 onClick={() => setView('code')}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-[5px] transition-colors ease-linear ${
                   view === 'code'
-                    ? 'bg-slate-50 text-slate-950 font-medium'
-                    : 'text-slate-400 hover:text-slate-50'
+                    ? 'bg-slate-50 text-slate-950 font-semibold'
+                    : 'text-slate-200 hover:text-slate-50 hover:bg-slate-800/50'
                 }`}
               >
                 <Code2 className="w-3.5 h-3.5" />
@@ -541,11 +636,11 @@ function ComparePanel({
                 href={agent.result.previewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-300 truncate max-w-[360px]"
+                className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-mono text-slate-300 hover:text-slate-50 truncate max-w-[360px] transition-colors"
               >
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#14B8A6]" />
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#14B8A6] shadow-[0_0_8px_#14B8A6]" />
                 Live in Daytona
-                <span className="truncate">· {agent.result.previewUrl}</span>
+                <span className="truncate text-slate-400">· {agent.result.previewUrl}</span>
                 <ExternalLink className="w-3 h-3 shrink-0" />
               </a>
             )}
@@ -557,56 +652,56 @@ function ComparePanel({
           {agent.result && (
             <>
               {/* Summary always visible */}
-              <div className="bg-slate-950 border border-slate-800 rounded-[7px] p-4">
+              <div className="bg-slate-950/80 border border-slate-700 rounded-[7px] p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-3.5 h-3.5" style={{ color: accent }} />
-                  <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-slate-500">
+                  <Sparkles className="w-3.5 h-3.5" style={{ color: accent, filter: `drop-shadow(0 0 6px ${accent})` }} />
+                  <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-200">
                     Summary
                   </div>
                 </div>
-                <div className="text-[14px] text-slate-300 leading-relaxed">
+                <div className="text-[14px] text-slate-100 leading-relaxed">
                   {agent.result.summary}
                 </div>
               </div>
 
               {view === 'preview' && agent.result.previewUrl && (
-                <div className="bg-white rounded-[7px] overflow-hidden border border-slate-800">
-                  <iframe
-                    src={`/api/preview/${encodePreviewTarget(agent.result.previewUrl, agent.result.previewToken)}/`}
-                    className="w-full h-[600px]"
-                    title={`${persona.name} live preview`}
-                  />
-                </div>
+                <PreviewFrame
+                  src={`/api/preview/${encodePreviewTarget(agent.result.previewUrl, agent.result.previewToken)}/`}
+                  title={`${persona.name} live preview`}
+                  accent={accent}
+                  icon={persona.icon}
+                />
               )}
 
               {view === 'code' && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="text-[11px] font-mono uppercase tracking-[0.18em] text-slate-500">
+                    <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-200">
                       {agent.result.files.length} files changed
                     </div>
-                    <span className="h-px flex-1 bg-slate-800" />
+                    <span className="h-px flex-1 bg-slate-700" />
                   </div>
                   <div className="space-y-2">
                     {agent.result.files.map((file, idx) => (
                       <div
                         key={idx}
-                        className="bg-slate-950 border border-slate-800 rounded-[7px] overflow-hidden"
+                        className="bg-slate-950/80 border border-slate-700 rounded-[7px] overflow-hidden"
                       >
-                        <div className="px-4 py-2 border-b border-slate-800 text-[12px] font-mono flex items-center justify-between">
-                          <span className="text-slate-300 truncate">{file.path}</span>
+                        <div className="px-4 py-2 border-b border-slate-700 text-[12px] font-mono flex items-center justify-between">
+                          <span className="text-slate-100 truncate font-medium">{file.path}</span>
                           <span
-                            className="text-[10px] uppercase tracking-[0.18em] px-2 py-0.5 rounded-full border"
+                            className="text-[10px] font-semibold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full border"
                             style={{
                               color: file.action === 'create' ? '#14B8A6' : '#A78BFA',
-                              borderColor: file.action === 'create' ? 'rgba(20,184,166,0.3)' : 'rgba(167,139,250,0.3)',
-                              background: file.action === 'create' ? 'rgba(20,184,166,0.08)' : 'rgba(167,139,250,0.08)',
+                              borderColor: file.action === 'create' ? 'rgba(20,184,166,0.4)' : 'rgba(167,139,250,0.4)',
+                              background: file.action === 'create' ? 'rgba(20,184,166,0.12)' : 'rgba(167,139,250,0.12)',
+                              boxShadow: file.action === 'create' ? '0 0 12px -4px #14B8A6' : '0 0 12px -4px #A78BFA',
                             }}
                           >
                             {file.action}
                           </span>
                         </div>
-                        <pre className="p-4 text-[12px] font-mono leading-relaxed overflow-x-auto max-h-80 overflow-y-auto text-slate-300">
+                        <pre className="p-4 text-[12px] font-mono leading-relaxed overflow-x-auto max-h-80 overflow-y-auto text-slate-200">
                           <code>{file.content.slice(0, 3000)}</code>
                         </pre>
                       </div>
@@ -640,11 +735,16 @@ function ComparePanel({
             <button
               onClick={handlePickThis}
               disabled={creatingPR}
-              className="w-full py-3.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 text-black rounded-[7px] font-semibold text-[14px] disabled:opacity-50 transition-all ease-linear duration-200"
+              className="w-full py-3.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 text-black rounded-[7px] font-semibold text-[14px] disabled:opacity-70 disabled:cursor-not-allowed transition-all ease-linear duration-200 shadow-[0_8px_32px_-8px_rgba(167,139,250,0.6)] hover:shadow-[0_12px_40px_-8px_rgba(167,139,250,0.8)] inline-flex items-center justify-center gap-2"
             >
-              {creatingPR
-                ? 'Opening pull request…'
-                : `Pick ${persona.name} — open PR`}
+              {creatingPR ? (
+                <>
+                  <Spinner className="w-4 h-4" color="#000" />
+                  Opening pull request…
+                </>
+              ) : (
+                `Pick ${persona.name} — open PR`
+              )}
             </button>
           )}
         </div>
