@@ -88,6 +88,9 @@ function rewriteCss(body: string, prefix: string): string {
 // which causes the iframe to flicker between blank and rendered. Disabling HMR
 // here keeps the preview stable.
 const VITE_CLIENT_STUB = `// Proxy-injected stub: Vite HMR disabled for the PatchParty iframe preview.
+// Must export every name the Vite-transformed modules might import (react-refresh,
+// CSS modules, etc.), otherwise ES-module loading throws "does not provide an
+// export named …" and the iframe goes blank.
 export function createHotContext() {
   return {
     accept() {}, acceptExports() {}, dispose() {}, prune() {}, decline() {},
@@ -113,8 +116,24 @@ export function removeStyle(id) {
     if (el) el.remove();
   } catch (_) {}
 }
-export const ErrorOverlay = class { constructor(){} close(){} };
-// Export nothing else — any unsupported usage is a no-op via destructuring.
+// Vite appends ?t=timestamp / ?v=hash to module URLs for cache busting — in our
+// static preview we just return the URL unchanged.
+export function injectQuery(url, queryToInject) { return url; }
+// Error-overlay no-ops so HMR error paths don't throw.
+export const ErrorOverlay = class extends HTMLElement { constructor(){ super(); } close(){} };
+if (typeof customElements !== 'undefined' && !customElements.get('vite-error-overlay')) {
+  try { customElements.define('vite-error-overlay', ErrorOverlay); } catch (_) {}
+}
+// Logger / ping helpers used by some Vite transforms.
+export function hmrPrelude() {}
+export function createHotContextForDep() { return createHotContext(); }
+export const hmrClient = {
+  notifyListeners() {}, send() {}, messenger: { send() {} },
+  queueUpdate() {}, queueMsg() {}, warnFailedFetch() {},
+};
+export function warnFailedFetch() {}
+// Default export guard so `import x from '/@vite/client'` still resolves.
+export default {};
 `
 
 async function proxy(
