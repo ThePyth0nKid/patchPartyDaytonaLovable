@@ -161,8 +161,8 @@ export default function PartyPage({
         })}
       </div>
 
-      {/* Compare modal */}
-      {allDone && selectedPersona && (
+      {/* Compare modal — open as soon as the clicked agent is done */}
+      {selectedPersona && (
         <ComparePanel
           party={party}
           selectedPersona={selectedPersona}
