@@ -47,14 +47,14 @@ export default function PartyPage({
   }, [party])
 
   useEffect(() => {
+    // Only fire on explicit tab close / reload. Earlier we also listened to
+    // `pagehide` and called cleanup on component unmount, but both fire too
+    // eagerly (e.g. during React dev remounts and SPA nav), which tried to
+    // delete sandboxes while they were still booting — Daytona then 409'd
+    // with "modified by another operation" and the iframe saw a dead sandbox.
     const handleUnload = () => cleanupSandboxes(collectSandboxIds(partyRef.current))
     window.addEventListener('beforeunload', handleUnload)
-    window.addEventListener('pagehide', handleUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleUnload)
-      window.removeEventListener('pagehide', handleUnload)
-      cleanupSandboxes(collectSandboxIds(partyRef.current))
-    }
+    return () => window.removeEventListener('beforeunload', handleUnload)
   }, [])
 
   useEffect(() => {
