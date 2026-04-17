@@ -327,9 +327,8 @@ function ComparePanel({
               {view === 'preview' && agent.result.previewUrl && (
                 <div className="bg-white rounded-lg overflow-hidden border border-slate-700">
                   <iframe
-                    src={agent.result.previewUrl}
+                    src={`/api/preview/${party.id}/${selectedPersona}/`}
                     className="w-full h-[600px]"
-                    sandbox="allow-scripts allow-same-origin allow-forms"
                     title={`${persona.name} live preview`}
                   />
                 </div>

@@ -36,8 +36,9 @@ export interface AgentState {
     commitSha?: string
     prUrl?: string
     summary: string
-    previewUrl?: string  // Live Daytona preview URL — the Lovable moment
-    sandboxId?: string   // Keep sandbox alive for preview (don't delete on success)
+    previewUrl?: string     // Raw Daytona preview URL (bypasses warning via proxy)
+    previewToken?: string   // Daytona preview-token, used by server proxy header
+    sandboxId?: string      // Keep sandbox alive for preview (don't delete on success)
     bonusFeatures?: Array<{
       name: string
       why: string

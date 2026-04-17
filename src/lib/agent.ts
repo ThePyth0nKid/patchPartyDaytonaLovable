@@ -131,9 +131,11 @@ export async function runAgent(
 
     // 7. Get the Live Preview URL — THE MAGIC
     let previewUrl: string | undefined
+    let previewToken: string | undefined
     try {
       const preview = await sandbox.getPreviewLink(3000)
       previewUrl = preview.url
+      previewToken = preview.token
       console.log(`[${persona.id}] Preview live at:`, previewUrl)
     } catch (e) {
       console.error(`[${persona.id}] Could not get preview URL:`, e)
@@ -166,6 +168,7 @@ export async function runAgent(
         branchName,
         summary,
         previewUrl,
+        previewToken,
         sandboxId: sandbox.id,
       },
     })
