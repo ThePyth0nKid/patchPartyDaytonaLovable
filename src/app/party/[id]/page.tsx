@@ -1,0 +1,394 @@
+'use client'
+
+import { use, useEffect, useState } from 'react'
+import { PERSONAS, PersonaId } from '@/lib/personas'
+import { Party, AgentState, PartyEvent } from '@/lib/types'
+
+export default function PartyPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = use(params)
+  const [party, setParty] = useState<Party | null>(null)
+  const [connected, setConnected] = useState(false)
+  const [selectedPersona, setSelectedPersona] = useState<PersonaId | null>(null)
+
+  useEffect(() => {
+    const es = new EventSource(`/api/party/${id}/stream`)
+    es.onopen = () => setConnected(true)
+    es.onerror = () => setConnected(false)
+
+    es.onmessage = (ev) => {
+      try {
+        const event = JSON.parse(ev.data) as
+          | { type: 'initial'; party: Party }
+          | PartyEvent
+        if (event.type === 'initial') {
+          setParty(event.party)
+        } else if (event.type === 'agent_update') {
+          setParty((prev) => {
+            if (!prev) return prev
+            return {
+              ...prev,
+              agents: {
+                ...prev.agents,
+                [event.persona]: {
+                  ...prev.agents[event.persona],
+                  ...event.state,
+                },
+              },
+            }
+          })
+        } else if (event.type === 'party_done') {
+          setParty(event.party)
+        }
+      } catch (e) {
+        console.error('Parse error:', e)
+      }
+    }
+
+    return () => es.close()
+  }, [id])
+
+  if (!party) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <div>Loading party...</div>
+      </main>
+    )
+  }
+
+  const allDone = Object.values(party.agents).every(
+    (a) => a.status === 'done' || a.status === 'error',
+  )
+  const doneCount = Object.values(party.agents).filter(
+    (a) => a.status === 'done',
+  ).length
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-6">
+      {/* Header */}
+      <div className="max-w-7xl mx-auto mb-6">
+        <a
+          href="/"
+          className="text-sm text-slate-400 hover:text-white transition-colors"
+        >
+          ← PatchParty
+        </a>
+        <div className="mt-2 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">{party.issueTitle}</h1>
+            <a
+              href={party.issueUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              {party.repoOwner}/{party.repoName}
+            </a>
+          </div>
+          <div className="text-right">
+            <div className="text-sm">{doneCount} of 5 agents finished</div>
+            <div className="w-40 h-2 bg-slate-800 rounded-full mt-1 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-600 to-blue-600 transition-all duration-500"
+                style={{ width: `${(doneCount / 5) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Agents grid */}
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {PERSONAS.map((persona) => {
+          const agent = party.agents[persona.id]
+          return (
+            <AgentCard
+              key={persona.id}
+              persona={persona}
+              agent={agent}
+              selected={selectedPersona === persona.id}
+              onSelect={() =>
+                agent.status === 'done' && setSelectedPersona(persona.id)
+              }
+            />
+          )
+        })}
+      </div>
+
+      {/* Compare modal */}
+      {allDone && selectedPersona && (
+        <ComparePanel
+          party={party}
+          selectedPersona={selectedPersona}
+          onClose={() => setSelectedPersona(null)}
+        />
+      )}
+
+      <div className="fixed bottom-4 right-4 text-xs text-slate-500">
+        {connected ? '● live' : '○ disconnected'}
+      </div>
+    </main>
+  )
+}
+
+function AgentCard({
+  persona,
+  agent,
+  selected,
+  onSelect,
+}: {
+  persona: (typeof PERSONAS)[number]
+  agent: AgentState
+  selected: boolean
+  onSelect: () => void
+}) {
+  const colorMap: Record<string, string> = {
+    hackfix: 'border-blue-500',
+    craftsman: 'border-green-500',
+    'ux-king': 'border-orange-500',
+    defender: 'border-slate-500',
+    innovator: 'border-purple-500',
+  }
+
+  const isDone = agent.status === 'done'
+  const isError = agent.status === 'error'
+  const isRunning = !isDone && !isError && agent.status !== 'queued'
+  const hasPreview = isDone && agent.result?.previewUrl
+
+  return (
+    <div
+      onClick={onSelect}
+      className={`
+        bg-slate-900 border-2 rounded-xl p-4 transition-all
+        ${selected ? colorMap[persona.color] : 'border-slate-800'}
+        ${isDone ? 'cursor-pointer hover:border-slate-600' : ''}
+        ${isRunning ? 'animate-pulse' : ''}
+      `}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-2xl">{persona.icon}</span>
+        <div className="flex-1">
+          <div className="font-semibold text-sm">{persona.name}</div>
+          <div className="text-[10px] text-slate-500 italic">
+            {persona.tagline}
+          </div>
+        </div>
+        {hasPreview && (
+          <span className="text-[10px] px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/30 rounded-full">
+            🟢 Live
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-2 text-xs">
+        <div
+          className={`
+          ${isError ? 'text-red-400' : isDone ? 'text-green-400' : 'text-slate-400'}
+        `}
+        >
+          {agent.message}
+        </div>
+
+        {agent.stats.filesChanged > 0 && (
+          <div className="text-slate-500">
+            📁 {agent.stats.filesChanged} files · +{agent.stats.linesAdded} lines
+          </div>
+        )}
+
+        {isDone && agent.result?.summary && (
+          <div className="mt-3 pt-3 border-t border-slate-800 text-slate-300 line-clamp-3">
+            {agent.result.summary}
+          </div>
+        )}
+
+        {isDone && (
+          <div className="mt-3 pt-2 text-center text-xs font-medium text-purple-400">
+            Click to inspect →
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ComparePanel({
+  party,
+  selectedPersona,
+  onClose,
+}: {
+  party: Party
+  selectedPersona: PersonaId
+  onClose: () => void
+}) {
+  const agent = party.agents[selectedPersona]
+  const persona = PERSONAS.find((p) => p.id === selectedPersona)!
+  const [creatingPR, setCreatingPR] = useState(false)
+  const [prUrl, setPrUrl] = useState<string | null>(null)
+  const hasPreview = !!agent.result?.previewUrl
+  // Default to preview view if available — that's the wow moment
+  const [view, setView] = useState<'preview' | 'code'>(
+    hasPreview ? 'preview' : 'code',
+  )
+
+  async function handlePickThis() {
+    setCreatingPR(true)
+    try {
+      const res = await fetch(`/api/party/${party.id}/pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personaId: selectedPersona }),
+      })
+      const data = await res.json()
+      if (data.prUrl) {
+        setPrUrl(data.prUrl)
+      } else {
+        alert(`PR creation failed: ${data.error ?? 'unknown'}`)
+      }
+    } catch (e) {
+      alert(`Error: ${e}`)
+    } finally {
+      setCreatingPR(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-slate-900 rounded-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{persona.icon}</span>
+            <div>
+              <div className="text-xl font-bold">{persona.name}</div>
+              <div className="text-sm text-slate-500">{persona.tagline}</div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-2xl"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* View Toggle */}
+        {hasPreview && (
+          <div className="px-6 pt-4 flex items-center gap-2">
+            <div className="flex bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={() => setView('preview')}
+                className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                  view === 'preview'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🖥 Live Preview
+              </button>
+              <button
+                onClick={() => setView('code')}
+                className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                  view === 'code'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📝 Code
+              </button>
+            </div>
+            {view === 'preview' && agent.result?.previewUrl && (
+              <a
+                href={agent.result.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto text-xs text-slate-500 hover:text-slate-300 truncate max-w-[300px]"
+              >
+                🟢 Live in Daytona · {agent.result.previewUrl} ↗
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {agent.result && (
+            <>
+              {/* Summary always visible */}
+              <div className="bg-slate-800 rounded-lg p-4">
+                <div className="text-sm font-semibold mb-2">Summary</div>
+                <div className="text-sm text-slate-300">
+                  {agent.result.summary}
+                </div>
+              </div>
+
+              {view === 'preview' && agent.result.previewUrl && (
+                <div className="bg-white rounded-lg overflow-hidden border border-slate-700">
+                  <iframe
+                    src={agent.result.previewUrl}
+                    className="w-full h-[600px]"
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    title={`${persona.name} live preview`}
+                  />
+                </div>
+              )}
+
+              {view === 'code' && (
+                <div>
+                  <div className="text-sm font-semibold mb-3">
+                    {agent.result.files.length} Files Changed
+                  </div>
+                  <div className="space-y-3">
+                    {agent.result.files.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-950 rounded-lg overflow-hidden"
+                      >
+                        <div className="px-4 py-2 bg-slate-800 text-xs font-mono flex items-center justify-between">
+                          <span>{file.path}</span>
+                          <span className="text-slate-500">{file.action}</span>
+                        </div>
+                        <pre className="p-4 text-xs overflow-x-auto max-h-80 overflow-y-auto">
+                          <code>{file.content.slice(0, 3000)}</code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer / Action */}
+        <div className="p-6 border-t border-slate-800">
+          {prUrl ? (
+            <div className="text-center space-y-2">
+              <div className="text-green-400 font-semibold">PR created! 🎉</div>
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-400 hover:text-purple-300 underline"
+              >
+                {prUrl}
+              </a>
+            </div>
+          ) : (
+            <button
+              onClick={handlePickThis}
+              disabled={creatingPR}
+              className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 rounded-lg font-semibold disabled:opacity-50"
+            >
+              {creatingPR
+                ? 'Creating PR...'
+                : `🎉 Pick ${persona.name} — Create PR`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
