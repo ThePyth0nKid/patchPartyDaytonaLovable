@@ -48,9 +48,6 @@ export async function runAgent(
       language: 'typescript',
       public: true,
       autoStopInterval: PREVIEW_LIFETIME_MINUTES,
-      // Keep each sandbox small so 5 run in parallel under the Daytona free-tier
-      // caps (10 CPU cores total, 30 GiB disk total).
-      resources: { cpu: 1, memory: 2, disk: 3 },
     })
 
     // 2. Clone the repo (shallow for speed)
