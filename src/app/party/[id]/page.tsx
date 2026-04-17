@@ -317,7 +317,9 @@ export default function PartyPage({
           <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
             <div className="flex items-center gap-2 text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA]">
               <Sparkles className="w-3.5 h-3.5 drop-shadow-[0_0_6px_#A78BFA]" />
-              Orchestrator
+              {party.classification.squadId
+                ? `${party.classification.squadId} squad`
+                : 'Orchestrator'}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-100">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700 font-mono font-medium">

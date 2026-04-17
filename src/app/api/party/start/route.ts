@@ -4,7 +4,7 @@ import { getPersona, PersonaId } from '@/lib/personas'
 import { partyStore } from '@/lib/store'
 import { fetchIssue } from '@/lib/github'
 import { runAgent } from '@/lib/agent'
-import { classifyIssue, selectPersonas } from '@/lib/orchestrator'
+import { classifyIssue, selectPersonas, selectSquad } from '@/lib/orchestrator'
 import { AgentState, Party, PartyClassification } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -25,10 +25,15 @@ export async function POST(req: NextRequest) {
   // 1. Classify the issue. Fast Haiku call, returns a safe fallback on error.
   const base = await classifyIssue(issue.title, issue.body)
 
-  // 2. Pick a 5-persona team based on the classification.
-  const selectedPersonas = selectPersonas(base)
+  // 2. Pick ONE squad. Every agent in the squad is a deep specialist for that
+  //    domain — the user gets five expert takes on the same problem, not a
+  //    generalist mix. Squad IDs: 'philosophy' | 'frontend' | 'backend' |
+  //    'security' | 'fullstack' | 'bugfix' | 'infra'.
+  const squadId = selectSquad(base)
+  const selectedPersonas = selectPersonas(squadId)
   const classification: PartyClassification = {
     ...base,
+    squadId,
     selectedPersonas,
   }
 

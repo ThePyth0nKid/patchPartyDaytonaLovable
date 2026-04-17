@@ -1,12 +1,12 @@
 // Issue-aware orchestrator: reads the issue once, decides what type of problem
-// it is, and assembles a 5-persona team from the pool that fits.
+// it is, and picks ONE squad of 5 deeply-specialised agents to race on it.
 //
-// Keeps the user-facing flow identical ("paste URL → click") — the classifier
-// runs server-side during `/api/party/start` and its verdict is attached to the
+// The user-facing flow stays identical (paste URL → click). The classifier
+// runs server-side during /api/party/start and its verdict is attached to the
 // party so the UI can render the "team assembled because X" banner.
 
 import Anthropic from '@anthropic-ai/sdk'
-import { PersonaId } from './personas'
+import { PersonaId, SquadId, SQUADS } from './personas'
 import {
   IssueConcern,
   IssueType,
@@ -40,7 +40,7 @@ Rules:
 export async function classifyIssue(
   title: string,
   body: string,
-): Promise<Omit<PartyClassification, 'selectedPersonas'>> {
+): Promise<Omit<PartyClassification, 'selectedPersonas' | 'squadId'>> {
   try {
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -102,81 +102,46 @@ export async function classifyIssue(
     return { type, concerns, complexity, reason }
   } catch (e) {
     console.error('[orchestrator] classify failed, falling back:', e)
-    // Safe fallback — keeps the app working even if the classifier call
-    // fails (API outage, rate limit, weird model output).
     return {
       type: 'fullstack',
       concerns: [],
       complexity: 'medium',
-      reason: 'Classifier unavailable — assembled balanced default team.',
+      reason: 'Classifier unavailable — assembled the All-Trades squad as a safe default.',
     }
   }
 }
 
 /**
- * Pure, deterministic: given a classification, produce an ordered list of
- * exactly 5 PersonaIds. Tweak the rules here to reshape the team without
- * touching any UI or API code.
+ * Pure, deterministic: given a classification, pick ONE squad by id.
+ *
+ * Rule of thumb:
+ *   - any "security" concern → Security squad (overrides type)
+ *   - otherwise fall through to the squad matching the issue type
+ *   - fullstack with no other hints gets the philosophy (All-Trades) squad
+ *     so the demo keeps its 5-philosophy character when classification is vague
  */
-export function selectPersonas(
-  c: Omit<PartyClassification, 'selectedPersonas'>,
-): PersonaId[] {
-  const picked: PersonaId[] = []
-  const add = (...ids: PersonaId[]) => {
-    for (const id of ids) if (!picked.includes(id) && picked.length < 5) picked.push(id)
-  }
-
-  // Concern-driven mandatory additions come first — anything security-sensitive
-  // always gets the Defender at the table even if the body screams "frontend".
-  if (c.concerns.includes('security')) add('defender')
-
-  // Type-driven core team.
+export function selectSquad(
+  c: Omit<PartyClassification, 'selectedPersonas' | 'squadId'>,
+): SquadId {
+  if (c.concerns.includes('security')) return 'security'
   switch (c.type) {
     case 'frontend':
-      add('frontend-specialist', 'ux-king', 'hackfix', 'craftsman', 'innovator')
-      break
+      return 'frontend'
     case 'backend':
-      add('backend-specialist', 'api-designer', 'craftsman', 'defender', 'hackfix')
-      break
-    case 'fullstack':
-      add(
-        'fullstack-engineer',
-        'frontend-specialist',
-        'backend-specialist',
-        'craftsman',
-        'innovator',
-      )
-      break
-    case 'infrastructure':
-      add('backend-specialist', 'defender', 'craftsman', 'hackfix', 'innovator')
-      break
+      return 'backend'
     case 'bug-fix':
-      add('craftsman', 'defender', 'hackfix', 'innovator', 'ux-king')
-      break
+      return 'bugfix'
+    case 'infrastructure':
+      return 'infra'
+    case 'fullstack':
+      // Fullstack issues default to the philosophy squad unless a sub-concern
+      // pushes them somewhere specific — most demo issues land here.
+      if (c.concerns.includes('api') || c.concerns.includes('data'))
+        return 'fullstack'
+      return 'philosophy'
   }
+}
 
-  // Complexity tuning: on simple issues, swap out one specialist for a philosophy
-  // persona so we don't over-engineer. On complex ones, pull in Innovator.
-  if (c.complexity === 'simple' && !picked.includes('hackfix')) {
-    picked[picked.length - 1] = 'hackfix'
-  }
-  if (c.complexity === 'complex' && !picked.includes('innovator')) {
-    picked[picked.length - 1] = 'innovator'
-  }
-
-  // Fill any remaining slots from a stable priority list — guarantees exactly 5.
-  const fill: PersonaId[] = [
-    'craftsman',
-    'hackfix',
-    'innovator',
-    'ux-king',
-    'defender',
-    'frontend-specialist',
-    'backend-specialist',
-    'fullstack-engineer',
-    'api-designer',
-  ]
-  for (const id of fill) if (picked.length < 5) add(id)
-
-  return picked.slice(0, 5)
+export function selectPersonas(squadId: SquadId): PersonaId[] {
+  return SQUADS[squadId].personaIds
 }

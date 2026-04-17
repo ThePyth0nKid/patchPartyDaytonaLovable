@@ -1,4 +1,4 @@
-import { PersonaId } from './personas'
+import { PersonaId, SquadId } from './personas'
 
 export type AgentStatus =
   | 'queued'
@@ -71,7 +71,9 @@ export interface PartyClassification {
   complexity: 'simple' | 'medium' | 'complex'
   /** One-sentence human-readable reason for the selection — surfaced in UI. */
   reason: string
-  /** Which personas the orchestrator chose, and why this shape fits the issue. */
+  /** The squad the orchestrator picked — drives colour/banner copy in the UI. */
+  squadId: SquadId
+  /** Resolved persona ids the squad contains (denormalised for easy access). */
   selectedPersonas: PersonaId[]
 }
 
