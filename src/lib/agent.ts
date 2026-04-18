@@ -179,11 +179,13 @@ export async function runAgent(
       },
     })
   } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    const friendly = friendlyAgentError(raw)
     console.error(`[${persona.id}] Error:`, err)
     emit({
       status: 'error',
-      message: 'Something went wrong.',
-      error: err instanceof Error ? err.message : String(err),
+      message: friendly,
+      error: raw,
     })
   } finally {
     // CRITICAL: only delete sandbox on FAILURE.
@@ -222,6 +224,83 @@ Implement this issue according to your philosophy. Return ONLY a JSON response i
 CRITICAL: After your changes, the dev server (npm run dev) will be started automatically and shown to the user as a LIVE PREVIEW. Make sure your code COMPILES and the dev server boots without errors. Don't introduce missing dependencies — use only what's already in package.json.`
 }
 
+/**
+ * Map raw agent errors to short, user-facing messages. The full raw message
+ * still lands in AgentState.error for the "Show details" expander in the UI.
+ */
+function friendlyAgentError(raw: string): string {
+  const s = raw.toLowerCase()
+  if (s.includes('invalid json') || s.includes('could not parse claude')) {
+    return 'Claude returned malformed JSON. This sometimes happens on complex issues — try again.'
+  }
+  if (s.includes('rate_limit') || s.includes('429')) {
+    return 'Anthropic rate limit hit. Wait a minute and retry.'
+  }
+  if (s.includes('overloaded')) {
+    return 'Anthropic API is overloaded. Retry in a few seconds.'
+  }
+  if (s.includes('timeout') || s.includes('timed out')) {
+    return 'Operation timed out. The sandbox or Claude call took too long.'
+  }
+  if (s.includes('git push') || s.includes('authentication failed')) {
+    return 'Could not push branch to GitHub. Check that the app has write access to this repo.'
+  }
+  if (s.includes('npm install') || s.includes('enoent') || s.includes('eresolve')) {
+    return 'Dependency install failed in the sandbox.'
+  }
+  if (s.includes('sandbox') && s.includes('limit')) {
+    return 'Daytona sandbox quota reached. Try again in a moment.'
+  }
+  return 'Agent failed. Open details below for the exact error.'
+}
+
+/** Strip trailing commas before `]` or `}` — a common Claude LLM mistake. */
+function stripTrailingCommas(s: string): string {
+  return s.replace(/,(\s*[\]}])/g, '$1')
+}
+
+function tryParse(s: string): unknown | null {
+  try {
+    return JSON.parse(s)
+  } catch {
+    try {
+      return JSON.parse(stripTrailingCommas(s))
+    } catch {
+      return null
+    }
+  }
+}
+
+function normalizeShape(
+  parsed: unknown,
+  personaId: string,
+): Array<{ path: string; action: 'create' | 'modify'; content: string }> | null {
+  if (Array.isArray(parsed)) {
+    return parsed as Array<{ path: string; action: 'create' | 'modify'; content: string }>
+  }
+  if (
+    personaId === 'innovator' &&
+    parsed &&
+    typeof parsed === 'object' &&
+    Array.isArray((parsed as { base?: unknown }).base)
+  ) {
+    return (parsed as { base: Array<{ path: string; action: 'create' | 'modify'; content: string }> }).base
+  }
+  if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { files?: unknown }).files)) {
+    return (parsed as { files: Array<{ path: string; action: 'create' | 'modify'; content: string }> }).files
+  }
+  return null
+}
+
+/** Extract the line/column around a JSON.parse error position for diagnostics. */
+function snippetAround(source: string, positionMatch: RegExpMatchArray | null): string {
+  if (!positionMatch) return ''
+  const pos = Number(positionMatch[1])
+  const start = Math.max(0, pos - 40)
+  const end = Math.min(source.length, pos + 40)
+  return source.slice(start, end).replace(/\s+/g, ' ')
+}
+
 function parseClaudeResponse(
   text: string,
   personaId: string,
@@ -230,27 +309,34 @@ function parseClaudeResponse(
   // Strip ``` fences if Claude added them despite instructions
   cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
 
-  try {
-    const parsed = JSON.parse(cleaned)
-    if (personaId === 'innovator' && parsed.base) {
-      return parsed.base
-    }
-    if (Array.isArray(parsed)) {
-      return parsed
-    }
-    throw new Error('Unexpected response shape')
-  } catch (e) {
-    // Last-resort: extract first JSON block from anywhere in response
-    const match = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/)
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[0])
-        if (Array.isArray(parsed)) return parsed
-        if (parsed.base) return parsed.base
-      } catch {}
-    }
-    throw new Error(`Could not parse Claude response: ${e}`)
+  // 1) Whole-response parse, with trailing-comma salvage
+  const direct = tryParse(cleaned)
+  if (direct !== null) {
+    const shape = normalizeShape(direct, personaId)
+    if (shape) return shape
   }
+
+  // 2) Extract first JSON block from anywhere in the response
+  const match = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/)
+  if (match) {
+    const extracted = tryParse(match[0])
+    if (extracted !== null) {
+      const shape = normalizeShape(extracted, personaId)
+      if (shape) return shape
+    }
+  }
+
+  // 3) Give up — surface a precise diagnostic
+  let detail = 'invalid JSON'
+  try {
+    JSON.parse(cleaned)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const pos = msg.match(/position (\d+)/)
+    const snippet = snippetAround(cleaned, pos)
+    detail = snippet ? `${msg} — near: "…${snippet}…"` : msg
+  }
+  throw new Error(`Claude returned invalid JSON (${detail})`)
 }
 
 async function generateSummary(

@@ -485,6 +485,17 @@ function AgentCard({
         </span>
       </div>
 
+      {isError && agent.error && (
+        <details className="mt-2 mb-2 text-[11px] text-slate-400 relative group/details">
+          <summary className="cursor-pointer select-none text-[10px] font-mono uppercase tracking-[0.16em] text-red-300/80 hover:text-red-300">
+            Show technical details
+          </summary>
+          <pre className="mt-2 p-3 bg-slate-950/60 border border-red-400/20 rounded-[5px] text-[11px] font-mono text-red-200/90 whitespace-pre-wrap break-words max-h-48 overflow-auto">
+            {agent.error}
+          </pre>
+        </details>
+      )}
+
       {agent.stats.filesChanged > 0 && (
         <div className="text-[11px] font-mono text-slate-400 relative">
           {agent.stats.filesChanged} files · <span className="text-[#14B8A6]">+{agent.stats.linesAdded}</span> / <span className="text-red-300">−{agent.stats.linesRemoved}</span>
