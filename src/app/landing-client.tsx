@@ -61,7 +61,7 @@ const FAQS = [
   },
   {
     q: 'What if all five agents write similar code?',
-    a: 'The personas are adversarial by design. Hackfix would never add auth checks; Defender would never skip validation. In our runs the diffs diverge hard — that is the product.',
+    a: 'Every squad is built adversarially. The Frontend squad pits a Minimalist against a Motion designer; Security pits OWASP against Zero-Trust. Philosophy — our fallback — runs Hackfix against Defender. Contradicting philosophies by design, so the diffs diverge hard.',
   },
   {
     q: 'Wait — five agents, but thirty specialists?',
@@ -247,7 +247,7 @@ export default function LandingClient() {
           {/* Persona row (characters, not emoji soup) */}
           <div className="mt-20 pt-10 border-t border-slate-800/60">
             <div className="text-[12px] font-mono font-medium uppercase tracking-[0.18em] text-slate-300 mb-5">
-              The five who show up
+              The fallback squad — when nothing else fits
             </div>
             <div className="flex flex-wrap gap-3">
               {PERSONAS.map((p) => {
@@ -288,8 +288,9 @@ export default function LandingClient() {
             <span className="text-slate-500"> No vibes required.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-[15px] md:text-[16px] text-slate-300 leading-relaxed">
-            Haiku reads the issue. Picks one of six squads. Five sandboxes spin up in parallel.
-            Previews arrive in under three minutes. You choose. We PR.
+            Haiku reads the issue. Picks the right squad — one of six specialists, or Philosophy as
+            fallback. Five sandboxes spin up in parallel. Previews arrive in under three minutes.
+            You choose. We PR.
           </p>
 
           <WorkflowDiagram />
@@ -308,15 +309,16 @@ export default function LandingClient() {
       {/* PERSONAS */}
       <section id="personas" className="border-b border-slate-800/60">
         <div className="max-w-6xl mx-auto px-6 py-24 md:py-32">
-          <SectionEyebrow num="02" label="The cast" />
+          <SectionEyebrow num="02" label="The fallback" />
           <div className="mt-6 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
             <h2 className="text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-2xl">
-              Adversarial
-              <span className="text-slate-500"> by design.</span>
+              Philosophy
+              <span className="text-slate-500"> — when nothing else fits.</span>
             </h2>
             <p className="text-slate-400 max-w-md text-[15px] leading-relaxed">
-              Five system prompts, five contradicting philosophies. The code diverges hard — that
-              is the feature.
+              If the orchestrator can&apos;t classify your issue into a specialist squad, these five
+              step in. Contradicting philosophies on purpose — the diffs diverge hard, and that is
+              the feature.
             </p>
           </div>
 
