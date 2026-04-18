@@ -159,7 +159,7 @@ export default function LandingClient() {
             <a href="#squads" className="hidden sm:inline hover:text-slate-50 transition-colors">Squads</a>
             <a href="#faq" className="hidden sm:inline hover:text-slate-50 transition-colors">FAQ</a>
             <a
-              href="https://github.com"
+              href="https://github.com/ThePyth0nKid/patchPartyDaytonaLovable"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] border border-slate-800 hover:border-slate-700 hover:bg-slate-900 transition-colors ease-linear"
@@ -240,6 +240,7 @@ export default function LandingClient() {
               <TrustMark>Claude Opus 4.7</TrustMark>
               <TrustMark>Daytona Sandboxes</TrustMark>
               <TrustMark>~50¢ / party</TrustMark>
+              <TrustMark>Open source · MIT</TrustMark>
               <TrustMark>Public & private repos</TrustMark>
             </div>
           </div>
@@ -599,7 +600,16 @@ export default function LandingClient() {
             </div>
             <p className="text-[13px] text-slate-300 leading-relaxed max-w-sm">
               A decision interface for the agent era. Built in one day at Factory Berlin for
-              AI Builders Berlin Hackday 2026.
+              AI Builders Berlin Hackday 2026. Open source under MIT — a side project by{' '}
+              <a
+                href="https://ultranova.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline decoration-slate-600 underline-offset-4 hover:text-slate-50 hover:decoration-slate-400 transition-colors"
+              >
+                Ultranova.io
+              </a>
+              .
             </p>
           </div>
 
@@ -643,10 +653,10 @@ export default function LandingClient() {
           <div className="max-w-6xl mx-auto px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[12px] font-mono text-slate-300">
             <div className="flex items-center gap-3">
               <Shield className="w-3.5 h-3.5" />
-              <span>MIT License · Public repos only · {new Date().getFullYear()}</span>
+              <span>MIT License · {new Date().getFullYear()} Ultranova.io</span>
             </div>
             <div className="flex items-center gap-4">
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="hover:text-slate-50 transition-colors inline-flex items-center gap-1.5">
+              <a href="https://github.com/ThePyth0nKid/patchPartyDaytonaLovable" target="_blank" rel="noopener noreferrer" className="hover:text-slate-50 transition-colors inline-flex items-center gap-1.5">
                 <Github className="w-3.5 h-3.5" />
                 github
               </a>
