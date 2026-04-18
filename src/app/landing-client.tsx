@@ -1,7 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowRight, ArrowUpRight, Github, Terminal, Sparkles, Shield } from 'lucide-react'
 import { PHILOSOPHY_PERSONAS as PERSONAS } from '@/lib/personas'
 
@@ -77,36 +75,6 @@ const FAQS = [
 ]
 
 export default function LandingClient() {
-  const router = useRouter()
-  const [issueUrl, setIssueUrl] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function startParty() {
-    if (!issueUrl.trim()) {
-      setError('Paste a GitHub issue URL.')
-      return
-    }
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch('/api/party/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issueUrl }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error ?? 'Failed to start party')
-      }
-      const { partyId } = await res.json()
-      router.push(`/party/${partyId}`)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something broke')
-      setLoading(false)
-    }
-  }
-
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50 font-sans">
       {/* NAV */}
@@ -173,55 +141,39 @@ export default function LandingClient() {
             in parallel, in sandboxes, in under three minutes. You pick the winner.
           </p>
 
-          {/* Form */}
+          {/* CTA */}
           <div className="mt-12 max-w-2xl">
             <div className="flex items-center gap-2 mb-3">
               <Terminal className="w-3.5 h-3.5 text-slate-300" />
               <label className="text-[12px] font-mono font-medium uppercase tracking-[0.18em] text-slate-300">
-                Paste a GitHub issue URL to start
+                Connect GitHub, pick an issue, let them race
               </label>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="url"
-                placeholder="https://github.com/user/repo/issues/123"
-                value={issueUrl}
-                onChange={(e) => setIssueUrl(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && startParty()}
-                disabled={loading}
-                className="flex-1 px-4 py-3.5 bg-slate-900/70 backdrop-blur border border-slate-700 rounded-[7px] text-slate-50 placeholder-slate-500 font-mono text-[13px] focus:outline-none focus:border-[#A78BFA] focus:ring-2 focus:ring-[#A78BFA]/40 transition-all ease-linear duration-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-              />
-              <button
-                onClick={startParty}
-                disabled={loading}
-                className="group relative inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 rounded-[7px] font-semibold text-black text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all ease-linear duration-200 whitespace-nowrap shadow-[0_8px_32px_-8px_rgba(167,139,250,0.6)] hover:shadow-[0_12px_40px_-8px_rgba(167,139,250,0.8)]"
+            <div className="flex flex-col sm:flex-row gap-3 items-start">
+              <a
+                href="/login"
+                className="group relative inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 rounded-[7px] font-semibold text-black text-sm transition-all ease-linear duration-200 whitespace-nowrap shadow-[0_8px_32px_-8px_rgba(167,139,250,0.6)] hover:shadow-[0_12px_40px_-8px_rgba(167,139,250,0.8)]"
               >
-                <span className="relative flex items-center gap-2">
-                  {loading ? (
-                    <>
-                      <Spinner className="w-4 h-4" />
-                      Starting party…
-                    </>
-                  ) : (
-                    <>
-                      Let&apos;s Party
-                      <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-                    </>
-                  )}
-                </span>
-              </button>
+                <Github className="w-4 h-4" />
+                Sign in with GitHub
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              </a>
+              <a
+                href="#how"
+                className="inline-flex items-center gap-1.5 px-4 py-3.5 rounded-[7px] border border-slate-700 hover:border-slate-500 text-slate-200 text-sm transition-colors"
+              >
+                See how it works
+              </a>
             </div>
-            {error && (
-              <div className="mt-3 flex items-center gap-2 text-red-300 text-[13px] font-mono">
-                <span className="w-1 h-1 rounded-full bg-red-400" />
-                {error}
-              </div>
-            )}
+            <p className="mt-4 text-[12.5px] text-slate-400 max-w-md">
+              We ask for read access to your issues and push access only on
+              branches we create. Nothing merges until you click.
+            </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono font-medium uppercase tracking-[0.14em] text-slate-300">
               <TrustMark>Claude Opus 4.7</TrustMark>
               <TrustMark>Daytona Sandboxes</TrustMark>
               <TrustMark>~50¢ / party</TrustMark>
-              <TrustMark>Public repos only</TrustMark>
+              <TrustMark>Public & private repos</TrustMark>
             </div>
           </div>
 
@@ -589,26 +541,6 @@ function TrustMark({ children }: { children: React.ReactNode }) {
     <span className="inline-flex items-center gap-1.5 before:content-[''] before:w-1 before:h-1 before:rounded-full before:bg-[#A78BFA] before:shadow-[0_0_6px_#A78BFA]">
       {children}
     </span>
-  )
-}
-
-function Spinner({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="Loading"
-    >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
-      <path
-        d="M21 12a9 9 0 0 0-9-9"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
   )
 }
 
