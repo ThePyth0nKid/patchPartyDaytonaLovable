@@ -51,7 +51,7 @@ export async function POST(
 
   const persona = getPersona(personaId)
 
-  const prBody = `## Implemented by PatchParty (${persona.icon} ${persona.name})
+  const prBody = `## Implemented by PatchParty — ${persona.name}
 
 **Philosophy:** ${persona.tagline}
 

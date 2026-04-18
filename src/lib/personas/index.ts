@@ -10,6 +10,45 @@
 //      then gets five deep-expert takes on the same domain, not a generalist
 //      mix.
 
+import type { LucideIcon } from 'lucide-react'
+import {
+  Hammer,
+  Wrench,
+  Palette,
+  Shield,
+  Lightbulb,
+  Minimize2,
+  Film,
+  Accessibility,
+  Puzzle,
+  FlaskConical,
+  Database,
+  Radio,
+  Sigma,
+  Zap,
+  FileCode,
+  ShieldCheck,
+  ShieldOff,
+  ScrollText,
+  Target,
+  KeyRound,
+  Link2,
+  Server,
+  Rocket,
+  Wifi,
+  WifiOff,
+  Search,
+  TestTube2,
+  Scissors,
+  Brush,
+  Construction,
+  Cloud,
+  Package,
+  CloudCog,
+  Activity,
+  Terminal,
+} from 'lucide-react'
+
 export type PersonaId =
   // Philosophy
   | 'hackfix'
@@ -57,7 +96,7 @@ export type PersonaId =
 export interface Persona {
   id: PersonaId
   name: string
-  icon: string
+  icon: LucideIcon
   tagline: string
   color: string
   systemPrompt: string
@@ -70,7 +109,7 @@ export const PERSONAS: Persona[] = [
   {
     id: 'hackfix',
     name: 'Hackfix',
-    icon: '🔨',
+    icon: Hammer,
     tagline: 'Ship it.',
     color: 'hackfix',
     systemPrompt: `You are Hackfix, a pragmatic developer who ships fast.
@@ -90,7 +129,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'craftsman',
     name: 'Craftsman',
-    icon: '🧱',
+    icon: Wrench,
     tagline: 'Make it proud.',
     color: 'craftsman',
     systemPrompt: `You are Craftsman, a developer who writes production-grade code.
@@ -111,7 +150,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'ux-king',
     name: 'UX-King',
-    icon: '🎨',
+    icon: Palette,
     tagline: 'Users first.',
     color: 'ux-king',
     systemPrompt: `You are UX-King, a developer obsessed with user experience.
@@ -132,7 +171,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'defender',
     name: 'Defender',
-    icon: '🛡',
+    icon: Shield,
     tagline: 'What if attacked?',
     color: 'defender',
     systemPrompt: `You are Defender, a security-first engineer.
@@ -155,7 +194,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'innovator',
     name: 'Innovator',
-    icon: '💡',
+    icon: Lightbulb,
     tagline: 'What if we went further?',
     color: 'innovator',
     systemPrompt: `You are Innovator, a developer who sees beyond the requested feature.
@@ -188,7 +227,7 @@ OUTPUT FORMAT: Return a JSON object:
   {
     id: 'frontend-minimalist',
     name: 'Minimalist',
-    icon: '🧼',
+    icon: Minimize2,
     tagline: 'Less code. More product.',
     color: 'hackfix',
     systemPrompt: `You are Minimalist, a frontend engineer who ships the smallest possible diff that solves the issue. You distrust abstractions, wrapper components, and utility soup. You reach for semantic HTML and a handful of CSS rules before anything else.
@@ -213,7 +252,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'frontend-motion',
     name: 'Motion',
-    icon: '🎞️',
+    icon: Film,
     tagline: 'Make it feel alive.',
     color: 'craftsman',
     systemPrompt: `You are Motion, a frontend engineer who believes interaction feedback is the difference between a website and a product. You choreograph state changes — hover, focus, enter, exit, layout shift — with intent. A flat UI is a bug.
@@ -238,7 +277,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'frontend-a11y',
     name: 'A11y',
-    icon: '🦮',
+    icon: Accessibility,
     tagline: 'Works for everyone or broken.',
     color: 'ux-king',
     systemPrompt: `You are A11y, a frontend engineer who tests every change with a keyboard and a screen reader before shipping. You treat WCAG 2.2 AA as the floor and push toward AAA where it costs nothing. You know the difference between role="button" and an actual button, and you always pick the actual button.
@@ -264,7 +303,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'frontend-design-system',
     name: 'System',
-    icon: '🧩',
+    icon: Puzzle,
     tagline: 'Consistency is the product.',
     color: 'defender',
     systemPrompt: `You are System, a frontend engineer who treats the codebase's existing design language as law. You read the tokens, the primitives, and the existing components before writing a single new line. A new one-off class name is a defect.
@@ -289,7 +328,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'frontend-modern-css',
     name: 'Platform CSS',
-    icon: '🧪',
+    icon: FlaskConical,
     tagline: 'The browser already does it.',
     color: 'innovator',
     systemPrompt: `You are Platform CSS, a frontend engineer who tracks the CSS Working Group and ships features before the JS ecosystem has a wrapper for them. You delete JavaScript by replacing it with a selector. You would rather use :has() than useState.
@@ -318,7 +357,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'backend-relational',
     name: 'Relational',
-    icon: '🗄️',
+    icon: Database,
     tagline: 'DB is truth.',
     color: 'hackfix',
     systemPrompt: `You are Relational, a backend engineer who believes the database schema is the contract that outlives every application layer above it.
@@ -342,7 +381,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'backend-event-driven',
     name: 'EventBus',
-    icon: '📡',
+    icon: Radio,
     tagline: 'State changes are facts.',
     color: 'craftsman',
     systemPrompt: `You are EventBus, a backend engineer who models every meaningful state change as an immutable, append-only fact.
@@ -366,7 +405,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'backend-functional-core',
     name: 'PureCore',
-    icon: '🧮',
+    icon: Sigma,
     tagline: 'Side effects are bugs.',
     color: 'ux-king',
     systemPrompt: `You are PureCore, a backend engineer who builds a pure functional core wrapped by a thin imperative shell.
@@ -390,7 +429,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'backend-performance',
     name: 'Hotpath',
-    icon: '⚡',
+    icon: Zap,
     tagline: 'Correct AND fast.',
     color: 'defender',
     systemPrompt: `You are Hotpath, a backend engineer obsessed with latency, throughput, and the actual cost of every line on the request path.
@@ -414,7 +453,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'backend-contract-first',
     name: 'Contract',
-    icon: '📜',
+    icon: FileCode,
     tagline: 'The API is the product.',
     color: 'innovator',
     systemPrompt: `You are Contract, a backend engineer who writes the schema before the handler and treats the API surface as the real deliverable.
@@ -442,7 +481,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'security-owasp',
     name: 'OWASP',
-    icon: '🛡',
+    icon: ShieldCheck,
     tagline: 'Cover the boring 90%.',
     color: 'hackfix',
     systemPrompt: `You are OWASP, a security engineer who lives inside the OWASP Top 10 and the ASVS checklist. You have patched more SQLi, XSS, CSRF, SSRF and open-redirect bugs than you can count, and you know that the vast majority of real-world breaches come from boring, well-documented classes of bugs that a disciplined checklist would have caught.
@@ -466,7 +505,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'security-zerotrust',
     name: 'Zero-Trust',
-    icon: '🚫',
+    icon: ShieldOff,
     tagline: 'Trust nothing, verify always.',
     color: 'craftsman',
     systemPrompt: `You are Zero-Trust, a security engineer who assumes the network is already compromised and the caller is already lying.
@@ -490,7 +529,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'security-compliance',
     name: 'Compliance',
-    icon: '📜',
+    icon: ScrollText,
     tagline: 'Legal is law.',
     color: 'ux-king',
     systemPrompt: `You are Compliance, a security engineer fluent in GDPR, CCPA, HIPAA, and SOC 2.
@@ -514,7 +553,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'security-threatmodel',
     name: 'Threat-Model',
-    icon: '🎯',
+    icon: Target,
     tagline: 'Think like the attacker.',
     color: 'defender',
     systemPrompt: `You are Threat-Model, a security engineer who runs STRIDE on every data flow before writing a line of code.
@@ -538,7 +577,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'security-crypto',
     name: 'Cryptographic',
-    icon: '🔐',
+    icon: KeyRound,
     tagline: 'Crypto done right.',
     color: 'innovator',
     systemPrompt: `You are Cryptographic, a security engineer who refuses to ship MD5, SHA1-for-auth, PKCS1v15, or home-rolled anything.
@@ -566,7 +605,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'fullstack-typed',
     name: 'Typed E2E',
-    icon: '🔗',
+    icon: Link2,
     tagline: 'Types are contracts.',
     color: 'hackfix',
     systemPrompt: `You are Typed E2E, a fullstack engineer who treats the network boundary as just another function call the compiler checks.
@@ -590,7 +629,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'fullstack-server-first',
     name: 'Server First',
-    icon: '🌐',
+    icon: Server,
     tagline: 'HTML first.',
     color: 'craftsman',
     systemPrompt: `You are Server First, a fullstack engineer who believes the browser is a rendering target, not an application runtime.
@@ -614,7 +653,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'fullstack-optimistic',
     name: 'Optimistic UX',
-    icon: '⚡',
+    icon: Rocket,
     tagline: 'Feel instant.',
     color: 'ux-king',
     systemPrompt: `You are Optimistic UX, a fullstack engineer who measures success in perceived latency, not p99 response time.
@@ -638,7 +677,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'fullstack-realtime',
     name: 'Realtime Sync',
-    icon: '📶',
+    icon: Wifi,
     tagline: 'Multiplayer by default.',
     color: 'defender',
     systemPrompt: `You are Realtime Sync, a fullstack engineer who assumes every screen has more than one viewer.
@@ -662,7 +701,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'fullstack-offline',
     name: 'Offline First',
-    icon: '📴',
+    icon: WifiOff,
     tagline: 'Works without internet.',
     color: 'innovator',
     systemPrompt: `You are Offline First, a fullstack engineer who treats the network as an optional accelerator, not a dependency.
@@ -690,7 +729,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'bugfix-root-cause',
     name: 'Root Cause',
-    icon: '🔍',
+    icon: Search,
     tagline: "Symptoms lie.",
     color: 'hackfix',
     systemPrompt: `You are Root Cause, a forensic debugger who refuses to patch anything until the true origin of the failure is understood.
@@ -714,7 +753,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'bugfix-regression-guard',
     name: 'Regression Guard',
-    icon: '🧪',
+    icon: TestTube2,
     tagline: 'Red first, then green.',
     color: 'craftsman',
     systemPrompt: `You are Regression Guard, a test-first debugger who believes an unreproduced bug is a rumour.
@@ -738,7 +777,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'bugfix-minimal-patch',
     name: 'Minimal Patch',
-    icon: '✂️',
+    icon: Scissors,
     tagline: 'Ship the fix. Stop.',
     color: 'ux-king',
     systemPrompt: `You are Minimal Patch, a surgical debugger whose entire discipline is restraint.
@@ -762,7 +801,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'bugfix-refactor-adjacent',
     name: 'Refactor Adjacent',
-    icon: '🧹',
+    icon: Brush,
     tagline: 'Fix the fix-enabler.',
     color: 'defender',
     systemPrompt: `You are Refactor Adjacent, a debugger who believes every bug is an accusation against the code around it.
@@ -786,7 +825,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'bugfix-defensive',
     name: 'Defensive',
-    icon: '🚧',
+    icon: Construction,
     tagline: 'Never crash there again.',
     color: 'innovator',
     systemPrompt: `You are Defensive, a hardening-focused debugger who treats every bug as proof that a zone of the codebase is under-protected.
@@ -814,7 +853,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'infra-platform-native',
     name: 'Platform',
-    icon: '🚀',
+    icon: Cloud,
     tagline: "Don't reinvent primitives.",
     color: 'hackfix',
     systemPrompt: `You are Platform, an infra engineer who treats the hosting provider as a first-class runtime, not a dumb VM rental.
@@ -838,7 +877,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'infra-container',
     name: 'Container',
-    icon: '📦',
+    icon: Package,
     tagline: 'Works everywhere.',
     color: 'craftsman',
     systemPrompt: `You are Container, an infra engineer who trusts exactly one artifact: a reproducible OCI image that runs the same on a laptop, a CI runner, and prod.
@@ -862,7 +901,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'infra-serverless',
     name: 'Serverless',
-    icon: '☁️',
+    icon: CloudCog,
     tagline: 'Pay for what you use.',
     color: 'ux-king',
     systemPrompt: `You are Serverless, an infra engineer who believes a server running at 3am waiting for traffic is a bug.
@@ -886,7 +925,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'infra-observability',
     name: 'Observability',
-    icon: '📈',
+    icon: Activity,
     tagline: 'See, then fix.',
     color: 'defender',
     systemPrompt: `You are Observability, an infra engineer who treats unlabelled log lines and missing traces as outages-in-waiting.
@@ -910,7 +949,7 @@ OUTPUT FORMAT: Return ONLY the file changes as a JSON array:
   {
     id: 'infra-devex',
     name: 'DevEx',
-    icon: '🛠️',
+    icon: Terminal,
     tagline: 'Make the right thing easy.',
     color: 'innovator',
     systemPrompt: `You are DevEx, an infra engineer who measures success in minutes-to-first-commit and red-to-green cycle time.

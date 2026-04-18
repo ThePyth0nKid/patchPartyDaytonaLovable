@@ -1,6 +1,25 @@
 'use client'
 
-import { ArrowRight, ArrowUpRight, Github, Terminal, Sparkles, Shield } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Github,
+  Terminal,
+  Sparkles,
+  Shield,
+  Palette,
+  Database,
+  Link2,
+  Search,
+  Cloud,
+  GitPullRequest,
+  FileText,
+  Brain,
+  Layers,
+  MousePointerClick,
+  Server,
+} from 'lucide-react'
 import { PHILOSOPHY_PERSONAS as PERSONAS } from '@/lib/personas'
 
 const PERSONA_ACCENTS: Record<string, string> = {
@@ -23,30 +42,6 @@ const PERSONA_DESCRIPTIONS: Record<string, string> = {
   innovator:
     'Implements the ask — and hands you 1–2 cherry-pickable bonus commits. Opt-in, non-breaking.',
 }
-
-const STEPS = [
-  {
-    n: '01',
-    label: 'PASTE',
-    title: 'Drop a GitHub issue URL.',
-    body:
-      'Public repo, any size. We read the issue, clone the repo into five isolated Daytona sandboxes.',
-  },
-  {
-    n: '02',
-    label: 'RACE',
-    title: 'Five agents, one problem.',
-    body:
-      'Claude Opus runs each persona with a different philosophy — in parallel, live-streamed to your screen.',
-  },
-  {
-    n: '03',
-    label: 'PICK',
-    title: 'Compare. Choose. PR.',
-    body:
-      'Diff view, live preview, per-file. Click the patch you trust — we open the PR against the source repo.',
-  },
-]
 
 const STATS = [
   { value: '46%', label: 'of code is AI-written in 2026' },
@@ -83,7 +78,7 @@ type SquadDisplay = {
   name: string
   tagline: string
   accent: string
-  icon: string
+  icon: LucideIcon
   members: readonly string[]
   when: string
 }
@@ -94,7 +89,7 @@ const SQUADS_DISPLAY: readonly SquadDisplay[] = [
     name: 'Frontend',
     tagline: 'Five takes on the UI.',
     accent: '#E879F9',
-    icon: '🎨',
+    icon: Palette,
     members: ['Minimalist', 'Motion', 'A11y', 'System', 'Platform CSS'],
     when: 'UI bugs, components, styling, accessibility',
   },
@@ -103,7 +98,7 @@ const SQUADS_DISPLAY: readonly SquadDisplay[] = [
     name: 'Backend',
     tagline: 'Five architectures.',
     accent: '#14B8A6',
-    icon: '🗄️',
+    icon: Database,
     members: ['Relational', 'EventBus', 'PureCore', 'Hotpath', 'Contract'],
     when: 'APIs, databases, services, data modeling',
   },
@@ -112,7 +107,7 @@ const SQUADS_DISPLAY: readonly SquadDisplay[] = [
     name: 'Security',
     tagline: 'Five threat models.',
     accent: '#60A5FA',
-    icon: '🛡',
+    icon: Shield,
     members: ['OWASP', 'Zero-Trust', 'Compliance', 'Threat-Model', 'Cryptographic'],
     when: 'Auth, input validation, crypto, PII handling',
   },
@@ -121,7 +116,7 @@ const SQUADS_DISPLAY: readonly SquadDisplay[] = [
     name: 'Fullstack',
     tagline: 'Five end-to-ends.',
     accent: '#A78BFA',
-    icon: '🔗',
+    icon: Link2,
     members: ['Typed E2E', 'Server First', 'Optimistic UX', 'Realtime Sync', 'Offline First'],
     when: 'Features spanning client and server',
   },
@@ -130,7 +125,7 @@ const SQUADS_DISPLAY: readonly SquadDisplay[] = [
     name: 'Bug-Fix',
     tagline: 'Five ways to debug.',
     accent: '#FF6B35',
-    icon: '🔍',
+    icon: Search,
     members: ['Root Cause', 'Regression Guard', 'Minimal Patch', 'Refactor Adjacent', 'Defensive'],
     when: 'Known-broken behaviour with a reproducer',
   },
@@ -139,7 +134,7 @@ const SQUADS_DISPLAY: readonly SquadDisplay[] = [
     name: 'Infrastructure',
     tagline: 'Five deployment styles.',
     accent: '#14B8A6',
-    icon: '🚀',
+    icon: Cloud,
     members: ['Platform', 'Container', 'Serverless', 'Observability', 'DevEx'],
     when: 'CI, deploys, containers, observability',
   },
@@ -255,24 +250,30 @@ export default function LandingClient() {
               The five who show up
             </div>
             <div className="flex flex-wrap gap-3">
-              {PERSONAS.map((p) => (
-                <div
-                  key={p.id}
-                  className="group inline-flex items-center gap-2.5 px-3.5 py-2 bg-slate-900/70 backdrop-blur border border-slate-700 rounded-full hover:border-slate-500 transition-all ease-linear duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_20px_-4px_var(--glow)]"
-                  style={{ ['--glow' as string]: PERSONA_ACCENTS[p.color] }}
-                >
-                  <span className="text-lg leading-none transition-[filter] duration-200 drop-shadow-[0_0_6px_var(--glow)] group-hover:drop-shadow-[0_0_14px_var(--glow)]">
-                    {p.icon}
-                  </span>
-                  <span
-                    className="text-[13px] font-semibold"
-                    style={{ color: PERSONA_ACCENTS[p.color], textShadow: `0 0 20px ${PERSONA_ACCENTS[p.color]}40` }}
+              {PERSONAS.map((p) => {
+                const Icon = p.icon
+                const accent = PERSONA_ACCENTS[p.color]
+                return (
+                  <div
+                    key={p.id}
+                    className="group inline-flex items-center gap-2.5 px-3.5 py-2 bg-slate-900/70 backdrop-blur border border-slate-700 rounded-full hover:border-slate-500 transition-all ease-linear duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_20px_-4px_var(--glow)]"
+                    style={{ ['--glow' as string]: accent }}
                   >
-                    {p.name}
-                  </span>
-                  <span className="text-[12px] text-slate-300">— {p.tagline}</span>
-                </div>
-              ))}
+                    <Icon
+                      className="w-5 h-5 transition-[filter] duration-200 drop-shadow-[0_0_6px_var(--glow)] group-hover:drop-shadow-[0_0_14px_var(--glow)]"
+                      strokeWidth={1.75}
+                      style={{ color: accent }}
+                    />
+                    <span
+                      className="text-[13px] font-semibold"
+                      style={{ color: accent, textShadow: `0 0 20px ${accent}40` }}
+                    >
+                      {p.name}
+                    </span>
+                    <span className="text-[12px] text-slate-300">— {p.tagline}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -281,30 +282,25 @@ export default function LandingClient() {
       {/* HOW */}
       <section id="how" className="border-b border-slate-800/60">
         <div className="max-w-6xl mx-auto px-6 py-24 md:py-32">
-          <SectionEyebrow num="01" label="How it works" />
+          <SectionEyebrow num="01" label="The flow" />
           <h2 className="mt-6 text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-3xl">
-            Three steps. Three minutes.
+            Watch the party form.
             <span className="text-slate-500"> No vibes required.</span>
           </h2>
+          <p className="mt-6 max-w-2xl text-[15px] md:text-[16px] text-slate-300 leading-relaxed">
+            Haiku reads the issue. Picks one of six squads. Five sandboxes spin up in parallel.
+            Previews arrive in under three minutes. You choose. We PR.
+          </p>
 
-          <div className="mt-16 grid md:grid-cols-3 gap-px bg-slate-800/60 border border-slate-800/60 rounded-[7px] overflow-hidden">
-            {STEPS.map((s) => (
-              <div key={s.n} className="group bg-slate-950/80 backdrop-blur p-8 md:p-10 min-h-[240px] flex flex-col relative overflow-hidden transition-colors hover:bg-slate-900/80">
-                <div
-                  aria-hidden
-                  className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                  style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.15), transparent 70%)' }}
-                />
-                <div className="flex items-baseline justify-between mb-6 relative">
-                  <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA]">
-                    {s.label}
-                  </span>
-                  <span className="text-[11px] font-mono text-slate-600">{s.n}</span>
-                </div>
-                <h3 className="text-2xl font-semibold tracking-[-0.01em] mb-3 text-slate-50 relative">{s.title}</h3>
-                <p className="text-[15px] text-slate-300 leading-relaxed relative">{s.body}</p>
-              </div>
-            ))}
+          <WorkflowDiagram />
+
+          <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <LegendDot label="Classify" hint="~2s · Haiku" />
+            <LegendDot label="Fan-out" hint="5 parallel" />
+            <LegendDot label="Sandbox boot" hint="~30s · Daytona" />
+            <LegendDot label="Preview" hint="live iframe" />
+            <LegendDot label="Pick" hint="you choose" />
+            <LegendDot label="PR" hint="auto-open" />
           </div>
         </div>
       </section>
@@ -327,6 +323,7 @@ export default function LandingClient() {
           <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
             {PERSONAS.map((p) => {
               const accent = PERSONA_ACCENTS[p.color]
+              const Icon = p.icon
               return (
                 <div
                   key={p.id}
@@ -342,11 +339,11 @@ export default function LandingClient() {
                     className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
                     style={{ background: `radial-gradient(circle at 50% 0%, ${accent}22, transparent 60%)` }}
                   />
-                  <div
-                    className="text-3xl mb-4 relative transition-[filter] duration-200 drop-shadow-[0_0_8px_var(--glow)] group-hover:drop-shadow-[0_0_18px_var(--glow)]"
-                  >
-                    {p.icon}
-                  </div>
+                  <Icon
+                    className="w-7 h-7 mb-4 relative transition-[filter] duration-200 drop-shadow-[0_0_8px_var(--glow)] group-hover:drop-shadow-[0_0_18px_var(--glow)]"
+                    strokeWidth={1.75}
+                    style={{ color: accent }}
+                  />
                   <div className="flex items-baseline gap-2 mb-1 relative">
                     <h3
                       className="text-[17px] font-semibold tracking-[-0.01em]"
@@ -385,7 +382,9 @@ export default function LandingClient() {
           </div>
 
           <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {SQUADS_DISPLAY.map((sq) => (
+            {SQUADS_DISPLAY.map((sq) => {
+              const SquadIcon = sq.icon
+              return (
               <div
                 key={sq.id}
                 className="group relative bg-slate-900/70 backdrop-blur border border-slate-700/80 rounded-[7px] p-6 hover:border-slate-600 transition-all ease-linear duration-200 hover:-translate-y-1 overflow-hidden"
@@ -401,11 +400,11 @@ export default function LandingClient() {
                   style={{ background: `radial-gradient(circle at 50% 0%, ${sq.accent}22, transparent 60%)` }}
                 />
                 <div className="flex items-start justify-between mb-4 relative">
-                  <div
-                    className="text-3xl leading-none transition-[filter] duration-200 drop-shadow-[0_0_8px_var(--glow)] group-hover:drop-shadow-[0_0_18px_var(--glow)]"
-                  >
-                    {sq.icon}
-                  </div>
+                  <SquadIcon
+                    className="w-7 h-7 transition-[filter] duration-200 drop-shadow-[0_0_8px_var(--glow)] group-hover:drop-shadow-[0_0_18px_var(--glow)]"
+                    strokeWidth={1.75}
+                    style={{ color: sq.accent }}
+                  />
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-slate-500">
                     5 specialists
                   </span>
@@ -441,7 +440,8 @@ export default function LandingClient() {
                   ))}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="mt-10 flex items-start gap-3 max-w-2xl">
@@ -542,18 +542,22 @@ export default function LandingClient() {
           />
           <div className="relative">
             <div className="flex justify-center gap-3 mb-8">
-              {PERSONAS.map((p, i) => (
-                <span
-                  key={p.id}
-                  className="text-3xl animate-pulse-slow"
-                  style={{
-                    animationDelay: `${i * 0.3}s`,
-                    filter: `drop-shadow(0 0 12px ${PERSONA_ACCENTS[p.color]})`,
-                  }}
-                >
-                  {p.icon}
-                </span>
-              ))}
+              {PERSONAS.map((p, i) => {
+                const Icon = p.icon
+                const accent = PERSONA_ACCENTS[p.color]
+                return (
+                  <Icon
+                    key={p.id}
+                    className="w-7 h-7 animate-pulse-slow"
+                    strokeWidth={1.75}
+                    style={{
+                      color: accent,
+                      animationDelay: `${i * 0.3}s`,
+                      filter: `drop-shadow(0 0 12px ${accent})`,
+                    }}
+                  />
+                )
+              })}
             </div>
             <h2 className="text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-3xl mx-auto text-glow">
               Stop trusting one AI.
@@ -718,5 +722,313 @@ function GridBackground() {
           'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%)',
       }}
     />
+  )
+}
+
+function LegendDot({ label, hint }: { label: string; hint: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#A78BFA] shadow-[0_0_6px_#A78BFA]" />
+      <span className="text-slate-200">{label}</span>
+      <span className="text-slate-500 normal-case tracking-normal font-sans text-[11px]">· {hint}</span>
+    </span>
+  )
+}
+
+type WorkflowNodeProps = {
+  label: string
+  title: string
+  icon: LucideIcon
+  accent: string
+  className?: string
+  compact?: boolean
+}
+
+function WorkflowNode({ label, title, icon: Icon, accent, className = '', compact = false }: WorkflowNodeProps) {
+  return (
+    <div
+      className={`relative bg-slate-900/80 backdrop-blur border border-slate-800/60 rounded-[7px] ${
+        compact ? 'px-3 py-2.5' : 'px-4 py-3'
+      } ${className}`}
+      style={{ ['--glow' as string]: accent }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px"
+        style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
+      />
+      <div className="flex items-center gap-2 relative">
+        <Icon
+          className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} shrink-0`}
+          strokeWidth={1.75}
+          style={{ color: accent, filter: `drop-shadow(0 0 6px ${accent})` }}
+        />
+        <div className="min-w-0">
+          <div
+            className={`font-mono font-semibold uppercase tracking-[0.18em] ${
+              compact ? 'text-[9px]' : 'text-[10px]'
+            }`}
+            style={{ color: accent }}
+          >
+            {label}
+          </div>
+          <div className={`${compact ? 'text-[11px]' : 'text-[12px]'} text-slate-100 font-medium truncate`}>
+            {title}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const WORKFLOW_SQUAD_BADGES: readonly { id: string; icon: LucideIcon; accent: string }[] = [
+  { id: 'frontend', icon: Palette, accent: '#E879F9' },
+  { id: 'backend', icon: Database, accent: '#14B8A6' },
+  { id: 'security', icon: Shield, accent: '#60A5FA' },
+  { id: 'fullstack', icon: Link2, accent: '#A78BFA' },
+  { id: 'bugfix', icon: Search, accent: '#FF6B35' },
+  { id: 'infra', icon: Cloud, accent: '#14B8A6' },
+]
+
+const WORKFLOW_AGENTS: readonly { name: string; accent: string }[] = [
+  { name: 'Minimalist', accent: '#FF6B35' },
+  { name: 'Motion', accent: '#14B8A6' },
+  { name: 'A11y', accent: '#E879F9' },
+  { name: 'System', accent: '#60A5FA' },
+  { name: 'Platform CSS', accent: '#A78BFA' },
+]
+
+function WorkflowDiagram() {
+  return (
+    <div
+      className="mt-16 relative bg-slate-950/60 backdrop-blur border border-slate-800/60 rounded-[7px] overflow-hidden"
+      aria-label="PatchParty orchestration workflow"
+      role="img"
+    >
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none opacity-[0.25]"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }}
+      />
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 55% at 50% 50%, rgba(167,139,250,0.10), transparent 70%)',
+        }}
+      />
+
+      <div className="relative px-5 py-10 md:px-12 md:py-14 flex flex-col items-center gap-6 md:gap-7">
+        {/* 1. Issue URL */}
+        <WorkflowNode
+          label="01 · Paste"
+          title="Issue URL"
+          icon={FileText}
+          accent="#A78BFA"
+        />
+        <FlowEdge />
+
+        {/* 2. Orchestrator */}
+        <WorkflowNode
+          label="02 · Classify"
+          title="Claude Haiku reads the issue"
+          icon={Brain}
+          accent="#E879F9"
+        />
+        <FlowEdge />
+
+        {/* 3. Squad router with orbiting badges */}
+        <div className="relative flex flex-col items-center">
+          <WorkflowNode
+            label="03 · Route"
+            title="Squad router"
+            icon={Layers}
+            accent="#60A5FA"
+          />
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {WORKFLOW_SQUAD_BADGES.map((sq, i) => {
+              const Icon = sq.icon
+              return (
+                <span
+                  key={sq.id}
+                  className="squad-cycle inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-slate-900/80 font-mono text-[10px] uppercase tracking-[0.18em]"
+                  style={{
+                    color: sq.accent,
+                    borderColor: `${sq.accent}55`,
+                    background: `${sq.accent}14`,
+                    animationDelay: `${i}s`,
+                  }}
+                >
+                  <Icon className="w-3 h-3" strokeWidth={1.75} style={{ color: sq.accent }} />
+                  {sq.id}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+
+        <FlowEdge funnel />
+
+        {/* 4. Fan-out: 5 agents */}
+        <div className="w-full max-w-5xl">
+          <div className="mb-3 text-center text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-slate-400">
+            Five agents · parallel · Claude Opus
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+            {WORKFLOW_AGENTS.map((a, i) => (
+              <div
+                key={a.name}
+                className={`relative ${i >= 3 ? 'hidden md:block' : ''}`}
+                style={{ ['--glow-alpha' as string]: `${a.accent}66` }}
+              >
+                <div
+                  className="node-pulse rounded-[7px] bg-slate-900/80 border border-slate-800/60 px-3 py-2.5"
+                  style={{ animationDelay: `${i * 0.35}s` }}
+                >
+                  <div
+                    className="text-[9px] font-mono font-semibold uppercase tracking-[0.18em]"
+                    style={{ color: a.accent }}
+                  >
+                    Agent 0{i + 1}
+                  </div>
+                  <div className="text-[11px] text-slate-100 font-medium truncate">{a.name}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Fan-out to sandboxes */}
+          <div className="mt-4 grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-3">
+            {WORKFLOW_AGENTS.map((a, i) => (
+              <div
+                key={a.name}
+                className={`relative ${i >= 3 ? 'hidden md:block' : ''}`}
+              >
+                <div className="relative rounded-[7px] border border-slate-800/60 bg-slate-950/80 overflow-hidden">
+                  <div
+                    aria-hidden
+                    className="absolute inset-x-0 top-0 h-px"
+                    style={{ background: `linear-gradient(90deg, transparent, ${a.accent}, transparent)` }}
+                  />
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <Server
+                      className="w-3.5 h-3.5 shrink-0"
+                      strokeWidth={1.75}
+                      style={{ color: a.accent }}
+                    />
+                    <span
+                      className="text-[9px] font-mono font-semibold uppercase tracking-[0.16em]"
+                      style={{ color: a.accent }}
+                    >
+                      Sandbox
+                    </span>
+                  </div>
+                  <div className="relative h-10 overflow-hidden">
+                    <div className="absolute inset-0 preview-shimmer" />
+                    <div className="absolute inset-0 flex items-center justify-center text-[9px] font-mono uppercase tracking-[0.16em] text-slate-500">
+                      preview · live
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="md:hidden mt-2 text-center text-[10px] font-mono text-slate-500">
+            · · · and two more
+          </div>
+        </div>
+
+        <FlowEdge funnel reverse />
+
+        {/* 5. Pick */}
+        <WorkflowNode
+          label="05 · Pick"
+          title="Compare diffs · choose the winner"
+          icon={MousePointerClick}
+          accent="#A78BFA"
+        />
+        <FlowEdge />
+
+        {/* 6. PR */}
+        <WorkflowNode
+          label="06 · Ship"
+          title="Pull request opened on GitHub"
+          icon={GitPullRequest}
+          accent="#14B8A6"
+        />
+      </div>
+    </div>
+  )
+}
+
+function FlowEdge({ funnel = false, reverse = false }: { funnel?: boolean; reverse?: boolean }) {
+  if (funnel) {
+    const height = 56
+    const width = 360
+    const y1 = reverse ? height : 0
+    const y2 = reverse ? 0 : height
+    return (
+      <svg
+        aria-hidden
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        className="max-w-md -my-1"
+      >
+        <defs>
+          <linearGradient id={`edge-grad-${reverse ? 'up' : 'down'}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#60A5FA" stopOpacity="0.4" />
+          </linearGradient>
+        </defs>
+        {[0, 1, 2, 3, 4].map((i) => {
+          const x2 = (width / 4) * i
+          return (
+            <line
+              key={i}
+              x1={width / 2}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke={`url(#edge-grad-${reverse ? 'up' : 'down'})`}
+              strokeWidth="1.25"
+              className="flow-path"
+              style={{ animationDelay: `${i * 0.18}s` }}
+            />
+          )
+        })}
+      </svg>
+    )
+  }
+  return (
+    <svg
+      aria-hidden
+      width="2"
+      height="42"
+      viewBox="0 0 2 42"
+      className="-my-1"
+    >
+      <defs>
+        <linearGradient id="edge-grad-straight" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#60A5FA" stopOpacity="0.6" />
+        </linearGradient>
+      </defs>
+      <line
+        x1="1"
+        y1="0"
+        x2="1"
+        y2="42"
+        stroke="url(#edge-grad-straight)"
+        strokeWidth="1.5"
+        className="flow-path"
+      />
+    </svg>
   )
 }

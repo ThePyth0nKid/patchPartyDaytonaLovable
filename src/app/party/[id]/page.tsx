@@ -1,9 +1,10 @@
 'use client'
 
 import { use, useEffect, useRef, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
-import { Party, AgentState, PartyEvent } from '@/lib/types'
+import { Party, AgentState, PartyStreamEvent } from '@/lib/types'
 
 const PERSONA_ACCENTS: Record<string, string> = {
   hackfix: '#FF6B35',
@@ -32,12 +33,12 @@ function PreviewFrame({
   src,
   title,
   accent,
-  icon,
+  icon: Icon,
 }: {
   src: string
   title: string
   accent: string
-  icon: string
+  icon: LucideIcon
 }) {
   const [loaded, setLoaded] = useState(false)
   const [timedOut, setTimedOut] = useState(false)
@@ -68,12 +69,11 @@ function PreviewFrame({
               background: `radial-gradient(ellipse 60% 40% at 50% 50%, ${accent}25, transparent 60%)`,
             }}
           />
-          <span
-            className="text-5xl relative animate-pulse-slow"
-            style={{ filter: `drop-shadow(0 0 20px ${accent})` }}
-          >
-            {icon}
-          </span>
+          <Icon
+            className="w-12 h-12 relative animate-pulse-slow"
+            strokeWidth={1.5}
+            style={{ color: accent, filter: `drop-shadow(0 0 20px ${accent})` }}
+          />
           <div className="relative flex items-center gap-2 text-[12px] font-mono uppercase tracking-[0.2em] text-slate-200">
             <Spinner className="w-3.5 h-3.5" color={accent} />
             {timedOut ? 'Sandbox taking its time…' : 'Warming up sandbox'}
@@ -185,7 +185,7 @@ export default function PartyPage({
       try {
         const event = JSON.parse(ev.data) as
           | { type: 'initial'; party: Party }
-          | PartyEvent
+          | PartyStreamEvent
         if (event.type === 'initial') {
           setParty(event.party)
         } else if (event.type === 'agent_update') {
@@ -218,18 +218,22 @@ export default function PartyPage({
       <main className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-50">
         <div className="flex flex-col items-center gap-5">
           <div className="flex gap-2">
-            {PHILOSOPHY_PERSONAS.map((p, i) => (
-              <span
-                key={p.id}
-                className="text-2xl animate-pulse-slow"
-                style={{
-                  animationDelay: `${i * 0.18}s`,
-                  filter: `drop-shadow(0 0 10px ${PERSONA_ACCENTS[p.color]})`,
-                }}
-              >
-                {p.icon}
-              </span>
-            ))}
+            {PHILOSOPHY_PERSONAS.map((p, i) => {
+              const Icon = p.icon
+              const accent = PERSONA_ACCENTS[p.color]
+              return (
+                <Icon
+                  key={p.id}
+                  className="w-7 h-7 animate-pulse-slow"
+                  strokeWidth={1.5}
+                  style={{
+                    color: accent,
+                    animationDelay: `${i * 0.18}s`,
+                    filter: `drop-shadow(0 0 10px ${accent})`,
+                  }}
+                />
+              )
+            })}
           </div>
           <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-slate-500">
             Booting party…
@@ -341,16 +345,19 @@ export default function PartyPage({
               </span>
             </div>
             <div className="md:ml-auto flex items-center gap-1.5">
-              {teamPersonas.map((p) => (
-                <span
-                  key={p.id}
-                  title={`${p.name} — ${p.tagline}`}
-                  className="text-xl leading-none"
-                  style={{ filter: `drop-shadow(0 0 6px ${PERSONA_ACCENTS[p.color]})` }}
-                >
-                  {p.icon}
-                </span>
-              ))}
+              {teamPersonas.map((p) => {
+                const Icon = p.icon
+                const accent = PERSONA_ACCENTS[p.color]
+                return (
+                  <Icon
+                    key={p.id}
+                    aria-label={`${p.name} — ${p.tagline}`}
+                    className="w-5 h-5"
+                    strokeWidth={1.75}
+                    style={{ color: accent, filter: `drop-shadow(0 0 6px ${accent})` }}
+                  />
+                )
+              })}
             </div>
           </div>
           {/* Classifier reason on small screens */}
@@ -405,6 +412,7 @@ function AgentCard({
   onSelect: () => void
 }) {
   const accent = PERSONA_ACCENTS[persona.color]
+  const PersonaIcon = persona.icon
 
   const isDone = agent.status === 'done'
   const isError = agent.status === 'error'
@@ -439,12 +447,14 @@ function AgentCard({
       />
 
       <div className="flex items-start gap-3 mb-4 relative">
-        <span
-          className={`text-2xl leading-none transition-[filter] duration-200 ${isRunning ? 'animate-pulse' : ''}`}
-          style={{ filter: `drop-shadow(0 0 ${isRunning || selected ? 14 : 6}px ${accent})` }}
-        >
-          {persona.icon}
-        </span>
+        <PersonaIcon
+          className={`w-6 h-6 shrink-0 transition-[filter] duration-200 ${isRunning ? 'animate-pulse' : ''}`}
+          strokeWidth={1.75}
+          style={{
+            color: accent,
+            filter: `drop-shadow(0 0 ${isRunning || selected ? 14 : 6}px ${accent})`,
+          }}
+        />
         <div className="flex-1 min-w-0">
           <div
             className="font-semibold text-[14px] tracking-[-0.01em]"
@@ -532,6 +542,7 @@ function ComparePanel({
 }) {
   const agent = party.agents[selectedPersona]
   const persona = PERSONAS.find((p) => p.id === selectedPersona)!
+  const PersonaIcon = persona.icon
   const team = party.classification?.selectedPersonas ?? []
   const candidateIndex = Math.max(0, team.indexOf(selectedPersona)) + 1
   const teamSize = team.length || Object.keys(party.agents).length
@@ -585,12 +596,11 @@ function ComparePanel({
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <span
-              className="text-3xl"
-              style={{ filter: `drop-shadow(0 0 18px ${accent})` }}
-            >
-              {persona.icon}
-            </span>
+            <PersonaIcon
+              className="w-7 h-7 shrink-0"
+              strokeWidth={1.75}
+              style={{ color: accent, filter: `drop-shadow(0 0 18px ${accent})` }}
+            />
             <div>
               <div className="flex items-baseline gap-2">
                 <div
