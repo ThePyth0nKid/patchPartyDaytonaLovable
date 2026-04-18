@@ -4,7 +4,7 @@ import { BrandMark } from '@/components/ui/brand-mark'
 import { auth, signOut } from '@/auth'
 
 interface AppShellProps {
-  active?: 'dashboard' | 'new' | 'parties' | 'settings'
+  active?: 'dashboard' | 'repos' | 'new' | 'parties' | 'settings'
   children: ReactNode
 }
 
@@ -34,6 +34,7 @@ export async function AppShell({ active, children }: AppShellProps) {
 
           <nav className="flex items-center gap-5">
             <Link href="/app" className={linkCls('dashboard')}>Dashboard</Link>
+            <Link href="/app/repos" className={linkCls('repos')}>Repos</Link>
             <Link href="/app/new" className={linkCls('new')}>New party</Link>
             <Link href="/app/parties" className={linkCls('parties')}>Parties</Link>
             <Link href="/app/settings" className={linkCls('settings')}>Settings</Link>

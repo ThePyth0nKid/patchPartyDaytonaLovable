@@ -22,10 +22,11 @@ model User {
   githubLogin   String?   @unique
   createdAt     DateTime  @default(now())
 
-  accounts Account[]
-  sessions Session[]
-  parties  Party[]
-  usage    UsageCounter?
+  accounts    Account[]
+  sessions    Session[]
+  parties     Party[]
+  usage       UsageCounter?
+  activeRepos ActiveRepo[]
 }
 
 model Account {
@@ -118,6 +119,25 @@ model Agent {
 
   @@unique([partyId, personaId])
   @@index([sandboxId])
+}
+
+model ActiveRepo {
+  id            String   @id @default(cuid())
+  userId        String
+  owner         String
+  name          String
+  description   String?
+  isPrivate     Boolean  @default(false)
+  defaultBranch String?
+  language      String?
+  stars         Int      @default(0)
+  addedAt       DateTime @default(now())
+  lastUsedAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, owner, name])
+  @@index([userId, lastUsedAt])
 }
 
 model UsageCounter {

@@ -14,6 +14,7 @@ import { AgentState, Party, PartyClassification } from '@/lib/types'
 import { parseBody, StartPartySchema } from '@/lib/validation'
 import { checkAndReserveUsage } from '@/lib/usage'
 import { log } from '@/lib/log'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -101,6 +102,26 @@ export async function POST(req: NextRequest) {
   }
 
   await partyStore.create(party, session.user.id)
+
+  // Auto-activate this repo (or bump lastUsedAt if already active) so it shows
+  // up on /app/repos for one-click re-entry next time.
+  prisma.activeRepo
+    .upsert({
+      where: {
+        userId_owner_name: {
+          userId: session.user.id,
+          owner: issue.owner,
+          name: issue.repo,
+        },
+      },
+      create: {
+        userId: session.user.id,
+        owner: issue.owner,
+        name: issue.repo,
+      },
+      update: { lastUsedAt: new Date() },
+    })
+    .catch((err) => log.warn('activeRepo upsert failed', { error: String(err) }))
 
   // 3. Fire off only the selected agents — do NOT await.
   for (const id of selectedPersonas) {

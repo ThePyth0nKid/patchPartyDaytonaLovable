@@ -51,7 +51,7 @@ const STEPS = [
 const STATS = [
   { value: '46%', label: 'of code is AI-written in 2026' },
   { value: '1.7×', label: 'more bugs in AI-generated PRs' },
-  { value: '5', label: 'parallel agents per party' },
+  { value: '30', label: 'specialists across 6 squads' },
   { value: '~50¢', label: 'per party, Opus + sandbox' },
 ]
 
@@ -69,8 +69,79 @@ const FAQS = [
     a: 'The personas are adversarial by design. Hackfix would never add auth checks; Defender would never skip validation. In our runs the diffs diverge hard — that is the product.',
   },
   {
+    q: 'Wait — five agents, but thirty specialists?',
+    a: 'Every party runs five agents in parallel. But which five depends on your issue. A CSS bug pulls the Frontend squad — Minimalist, Motion, A11y, System, Platform CSS. A webhook bug pulls the Backend squad. Six squads × five specialists = thirty possible personas, one squad per run.',
+  },
+  {
     q: 'Do I need to trust an AI with my repo?',
     a: 'Each agent runs in an ephemeral Daytona sandbox, scoped to a shallow clone. Nothing leaves until you pick a winner and click PR — then it is a normal GitHub pull request against a branch you can revert.',
+  },
+]
+
+type SquadDisplay = {
+  id: string
+  name: string
+  tagline: string
+  accent: string
+  icon: string
+  members: readonly string[]
+  when: string
+}
+
+const SQUADS_DISPLAY: readonly SquadDisplay[] = [
+  {
+    id: 'frontend',
+    name: 'Frontend',
+    tagline: 'Five takes on the UI.',
+    accent: '#E879F9',
+    icon: '🎨',
+    members: ['Minimalist', 'Motion', 'A11y', 'System', 'Platform CSS'],
+    when: 'UI bugs, components, styling, accessibility',
+  },
+  {
+    id: 'backend',
+    name: 'Backend',
+    tagline: 'Five architectures.',
+    accent: '#14B8A6',
+    icon: '🗄️',
+    members: ['Relational', 'EventBus', 'PureCore', 'Hotpath', 'Contract'],
+    when: 'APIs, databases, services, data modeling',
+  },
+  {
+    id: 'security',
+    name: 'Security',
+    tagline: 'Five threat models.',
+    accent: '#60A5FA',
+    icon: '🛡',
+    members: ['OWASP', 'Zero-Trust', 'Compliance', 'Threat-Model', 'Cryptographic'],
+    when: 'Auth, input validation, crypto, PII handling',
+  },
+  {
+    id: 'fullstack',
+    name: 'Fullstack',
+    tagline: 'Five end-to-ends.',
+    accent: '#A78BFA',
+    icon: '🔗',
+    members: ['Typed E2E', 'Server First', 'Optimistic UX', 'Realtime Sync', 'Offline First'],
+    when: 'Features spanning client and server',
+  },
+  {
+    id: 'bugfix',
+    name: 'Bug-Fix',
+    tagline: 'Five ways to debug.',
+    accent: '#FF6B35',
+    icon: '🔍',
+    members: ['Root Cause', 'Regression Guard', 'Minimal Patch', 'Refactor Adjacent', 'Defensive'],
+    when: 'Known-broken behaviour with a reproducer',
+  },
+  {
+    id: 'infra',
+    name: 'Infrastructure',
+    tagline: 'Five deployment styles.',
+    accent: '#14B8A6',
+    icon: '🚀',
+    members: ['Platform', 'Container', 'Serverless', 'Observability', 'DevEx'],
+    when: 'CI, deploys, containers, observability',
   },
 ]
 
@@ -90,6 +161,7 @@ export default function LandingClient() {
           <nav className="flex items-center gap-1 sm:gap-5 text-[13px] text-slate-400">
             <a href="#how" className="hidden sm:inline hover:text-slate-50 transition-colors">How it works</a>
             <a href="#personas" className="hidden sm:inline hover:text-slate-50 transition-colors">Personas</a>
+            <a href="#squads" className="hidden sm:inline hover:text-slate-50 transition-colors">Squads</a>
             <a href="#faq" className="hidden sm:inline hover:text-slate-50 transition-colors">FAQ</a>
             <a
               href="https://github.com"
@@ -137,7 +209,7 @@ export default function LandingClient() {
             generation anymore. It&apos;s selection.
           </p>
           <p className="mt-4 text-[17px] md:text-xl text-slate-300 max-w-2xl leading-relaxed">
-            PatchParty gives you five. Five Claude agents, five philosophies, five pull requests —
+            PatchParty gives you five. Not five generalists — five specialists matched to your issue,
             in parallel, in sandboxes, in under three minutes. You pick the winner.
           </p>
 
@@ -296,10 +368,96 @@ export default function LandingClient() {
         </div>
       </section>
 
+      {/* SQUADS */}
+      <section id="squads" className="border-b border-slate-800/60">
+        <div className="max-w-6xl mx-auto px-6 py-24 md:py-32">
+          <SectionEyebrow num="03" label="The squads" />
+          <div className="mt-6 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+            <h2 className="text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-3xl">
+              Not five generalists.
+              <span className="text-slate-500"> Five specialists.</span>
+            </h2>
+            <p className="text-slate-400 max-w-md text-[15px] leading-relaxed">
+              We classify your issue, then pick the whole squad. A frontend bug gets five frontend
+              engineers. A security review gets five threat models. One squad, five deep takes,
+              zero compromises.
+            </p>
+          </div>
+
+          <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {SQUADS_DISPLAY.map((sq) => (
+              <div
+                key={sq.id}
+                className="group relative bg-slate-900/70 backdrop-blur border border-slate-700/80 rounded-[7px] p-6 hover:border-slate-600 transition-all ease-linear duration-200 hover:-translate-y-1 overflow-hidden"
+                style={{ ['--glow' as string]: sq.accent }}
+              >
+                <div
+                  className="absolute inset-x-0 top-0 h-px"
+                  style={{ background: `linear-gradient(90deg, transparent, ${sq.accent}, transparent)` }}
+                />
+                <div
+                  aria-hidden
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                  style={{ background: `radial-gradient(circle at 50% 0%, ${sq.accent}22, transparent 60%)` }}
+                />
+                <div className="flex items-start justify-between mb-4 relative">
+                  <div
+                    className="text-3xl leading-none transition-[filter] duration-200 drop-shadow-[0_0_8px_var(--glow)] group-hover:drop-shadow-[0_0_18px_var(--glow)]"
+                  >
+                    {sq.icon}
+                  </div>
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    5 specialists
+                  </span>
+                </div>
+                <h3
+                  className="text-[20px] font-semibold tracking-[-0.01em] mb-1 relative"
+                  style={{ color: sq.accent, textShadow: `0 0 24px ${sq.accent}40` }}
+                >
+                  {sq.name}
+                </h3>
+                <p className="text-[11px] font-mono font-semibold uppercase tracking-[0.16em] text-slate-300 mb-4 relative">
+                  {sq.tagline}
+                </p>
+                <p className="text-[13px] text-slate-400 leading-relaxed mb-4 relative">
+                  <span className="font-mono font-semibold uppercase tracking-[0.14em] text-slate-500 text-[10px] mr-2">
+                    When
+                  </span>
+                  {sq.when}
+                </p>
+                <div className="flex flex-wrap gap-1.5 relative">
+                  {sq.members.map((m) => (
+                    <span
+                      key={m}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono border"
+                      style={{
+                        color: sq.accent,
+                        borderColor: `${sq.accent}55`,
+                        background: `${sq.accent}10`,
+                      }}
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex items-start gap-3 max-w-2xl">
+            <Sparkles className="w-4 h-4 text-[#A78BFA] shrink-0 mt-1 drop-shadow-[0_0_8px_#A78BFA]" />
+            <p className="text-[14px] text-slate-400 leading-relaxed">
+              Can&apos;t classify the issue? You get the all-trades philosophy squad — Hackfix,
+              Craftsman, UX-King, Defender, Innovator.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* STATS */}
       <section className="border-b border-slate-800/60">
         <div className="max-w-6xl mx-auto px-6 py-24 md:py-32">
-          <SectionEyebrow num="03" label="Why now" />
+          <SectionEyebrow num="04" label="Why now" />
           <h2 className="mt-6 text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-3xl">
             Generation is cheap.
             <br />
@@ -344,7 +502,7 @@ export default function LandingClient() {
       {/* FAQ */}
       <section id="faq" className="border-b border-slate-800/60">
         <div className="max-w-6xl mx-auto px-6 py-24 md:py-32">
-          <SectionEyebrow num="04" label="Reasonable questions" />
+          <SectionEyebrow num="05" label="Reasonable questions" />
           <h2 className="mt-6 text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-3xl">
             The pitch-room
             <span className="text-slate-500"> Q&amp;A.</span>
@@ -446,6 +604,7 @@ export default function LandingClient() {
             <ul className="space-y-2.5 text-[13px]">
               <li><a href="#how" className="hover:text-slate-50 transition-colors">How it works</a></li>
               <li><a href="#personas" className="hover:text-slate-50 transition-colors">Personas</a></li>
+              <li><a href="#squads" className="hover:text-slate-50 transition-colors">Squads</a></li>
               <li><a href="#faq" className="hover:text-slate-50 transition-colors">FAQ</a></li>
             </ul>
           </div>
