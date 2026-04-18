@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const party = partyStore.get(id)
+  const party = await partyStore.get(id)
 
   if (!party) {
     return new Response('Party not found', { status: 404 })
@@ -27,21 +27,31 @@ export async function GET(
           const payload = `data: ${JSON.stringify(event)}\n\n`
           controller.enqueue(encoder.encode(payload))
 
-          // Close stream when all agents are done or errored
-          const current = partyStore.get(id)
-          if (current) {
+          // Close stream when all agents are done or errored. Uses the
+          // synchronous in-memory snapshot — by the time the listener fires,
+          // the store has already applied the update.
+          void partyStore.get(id).then((current) => {
+            if (!current) return
             const allFinished = Object.values(current.agents).every(
               (a) => a.status === 'done' || a.status === 'error',
             )
             if (allFinished) {
               const done = `data: ${JSON.stringify({ type: 'party_done', party: current })}\n\n`
-              controller.enqueue(encoder.encode(done))
+              try {
+                controller.enqueue(encoder.encode(done))
+              } catch {
+                /* stream already closed */
+              }
               setTimeout(() => {
                 unsubscribe()
-                controller.close()
+                try {
+                  controller.close()
+                } catch {
+                  /* already closed */
+                }
               }, 100)
             }
-          }
+          })
         } catch (e) {
           console.error('SSE error:', e)
         }

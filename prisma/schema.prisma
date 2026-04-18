@@ -1,0 +1,130 @@
+// PatchParty — persistence schema
+// - Auth.js v5 tables: User, Account, Session, VerificationToken
+// - Domain:            Party, Agent, UsageCounter
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth.js v5 ──────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  githubLogin   String?   @unique
+  createdAt     DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+  parties  Party[]
+  usage    UsageCounter?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ─── PatchParty domain ───────────────────────────────────────────────────────
+
+enum PartyStatus {
+  RUNNING
+  DONE
+  FAILED
+  CANCELED
+}
+
+model Party {
+  id             String      @id
+  userId         String
+  issueUrl       String
+  issueTitle     String
+  issueBody      String      @db.Text
+  repoOwner      String
+  repoName       String
+  issueNumber    Int
+  classification Json?
+  status         PartyStatus @default(RUNNING)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  pickedPersona  String?
+  prUrl          String?
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agents Agent[]
+
+  @@index([userId, createdAt])
+}
+
+model Agent {
+  id           String   @id @default(cuid())
+  partyId      String
+  personaId    String
+  status       String
+  stage        String?
+  message      String?
+  progress     Int      @default(0)
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+  branchName   String?
+  previewUrl   String?
+  previewToken String?  @db.Text
+  sandboxId    String?
+  summary      String?  @db.Text
+  files        Json?
+  stats        Json?
+  error        String?
+  updatedAt    DateTime @updatedAt
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@unique([partyId, personaId])
+  @@index([sandboxId])
+}
+
+model UsageCounter {
+  userId       String   @id
+  partiesToday Int      @default(0)
+  partiesTotal Int      @default(0)
+  dayStart     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

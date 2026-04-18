@@ -1,34 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { nanoid } from 'nanoid'
+import { auth } from '@/auth'
 import { getPersona, PersonaId } from '@/lib/personas'
 import { partyStore } from '@/lib/store'
-import { fetchIssue } from '@/lib/github'
+import {
+  fetchIssue,
+  getOctokitFor,
+  getFallbackOctokit,
+} from '@/lib/github'
 import { runAgent } from '@/lib/agent'
 import { classifyIssue, selectPersonas, selectSquad } from '@/lib/orchestrator'
 import { AgentState, Party, PartyClassification } from '@/lib/types'
+import { parseBody, StartPartySchema } from '@/lib/validation'
+import { checkAndReserveUsage } from '@/lib/usage'
+import { log } from '@/lib/log'
 
 export async function POST(req: NextRequest) {
-  const { issueUrl } = await req.json()
-
-  if (!issueUrl) {
-    return NextResponse.json({ error: 'issueUrl required' }, { status: 400 })
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: 'Sign in with GitHub to start a party.' },
+      { status: 401 },
+    )
   }
 
-  const issue = await fetchIssue(issueUrl)
+  const parsed = await parseBody(req, StartPartySchema)
+  if (!parsed.ok) return parsed.response
+  const { issueUrl } = parsed.data
+
+  // 1. Resolve this user's GitHub token + Octokit. Falls back to env PAT only
+  //    if the user has no linked account AND a legacy PAT is configured —
+  //    useful for local dev before wiring an OAuth App.
+  const gh = await getOctokitFor(session.user.id)
+  const octokit = gh?.octokit ?? getFallbackOctokit()
+  const userToken = gh?.token ?? process.env.GITHUB_TOKEN
+  if (!octokit || !userToken) {
+    return NextResponse.json(
+      { error: 'GitHub account not connected. Re-link from Settings.' },
+      { status: 403 },
+    )
+  }
+
+  // 1.5 Cost-control: reserve usage BEFORE we spawn any sandbox. If we refuse
+  //     here the user loses nothing; if we refuse after runAgent() fires we've
+  //     already paid for Daytona + Anthropic.
+  const reservation = await checkAndReserveUsage(session.user.id)
+  if (!reservation.ok) {
+    const msg =
+      reservation.reason === 'daily-limit'
+        ? "You've hit today's free-tier limit. Resets at midnight UTC."
+        : 'You already have a party running. Finish or cancel it first.'
+    return NextResponse.json(
+      { error: msg, reason: reservation.reason, remaining: reservation.remaining },
+      { status: 429 },
+    )
+  }
+
+  const issue = await fetchIssue(octokit, issueUrl)
   if (!issue) {
     return NextResponse.json(
-      { error: 'Could not fetch issue. Is the repo public and URL correct?' },
+      { error: 'Could not fetch issue. Check the URL and that you have access to the repo.' },
       { status: 400 },
     )
   }
 
-  // 1. Classify the issue. Fast Haiku call, returns a safe fallback on error.
+  // 2. Classify + pick squad.
   const base = await classifyIssue(issue.title, issue.body)
-
-  // 2. Pick ONE squad. Every agent in the squad is a deep specialist for that
-  //    domain — the user gets five expert takes on the same problem, not a
-  //    generalist mix. Squad IDs: 'philosophy' | 'frontend' | 'backend' |
-  //    'security' | 'fullstack' | 'bugfix' | 'infra'.
   const squadId = selectSquad(base)
   const selectedPersonas = selectPersonas(squadId)
   const classification: PartyClassification = {
@@ -40,8 +77,6 @@ export async function POST(req: NextRequest) {
   const partyId = nanoid(10)
   const now = Date.now()
 
-  // 3. Seed the agent state only for the selected personas so the UI renders
-  //    exactly the team that was assembled.
   const initialAgents: Partial<Record<PersonaId, AgentState>> = {}
   for (const id of selectedPersonas) {
     initialAgents[id] = {
@@ -65,15 +100,26 @@ export async function POST(req: NextRequest) {
     agents: initialAgents,
   }
 
-  partyStore.create(party)
+  await partyStore.create(party, session.user.id)
 
-  // 4. Fire off only the selected agents — do NOT await.
+  // 3. Fire off only the selected agents — do NOT await.
   for (const id of selectedPersonas) {
     const persona = getPersona(id)
-    runAgent(party, persona).catch((err) => {
-      console.error(`Agent ${id} crashed:`, err)
+    runAgent(party, persona, { userToken }).catch((err) => {
+      log.error('agent crashed', {
+        partyId,
+        personaId: id,
+        error: err instanceof Error ? err.message : String(err),
+      })
     })
   }
+
+  log.info('party started', {
+    partyId,
+    userId: session.user.id,
+    squadId,
+    issueUrl,
+  })
 
   return NextResponse.json({ partyId, issue, classification })
 }

@@ -15,9 +15,15 @@ const daytona = new Daytona()
 // User has this long to inspect & pick. Then auto-stops.
 const PREVIEW_LIFETIME_MINUTES = 15
 
+export interface RunAgentOptions {
+  /** GitHub OAuth access token of the user who started the party — used to push the branch. */
+  userToken: string
+}
+
 export async function runAgent(
   party: Party,
   persona: Persona,
+  options: RunAgentOptions,
 ): Promise<void> {
   const emit = (state: Partial<AgentState>) => {
     partyStore.emit(party.id, {
@@ -143,7 +149,7 @@ export async function runAgent(
 
     // 8. Branch + commit + push (so the PR endpoint can reference the branch)
     const branchName = `patchparty/${persona.id}/${party.id.slice(0, 8)}`
-    const token = process.env.GITHUB_TOKEN
+    const token = options.userToken
     await sandbox.process.executeCommand(
       `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && git commit -m "feat: ${party.issueTitle.replace(/"/g, "'")} (via PatchParty: ${persona.name})" --allow-empty && git push "https://x-access-token:${token}@github.com/${party.repoOwner}/${party.repoName}.git" ${branchName}`,
     )

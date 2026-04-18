@@ -98,10 +98,11 @@ src/
 
 ### Key design choices
 
-- **No database.** In-memory store, parties are ephemeral. Post-hackathon → Redis.
+- **Postgres + Prisma.** Parties survive container restarts; per-user history and usage counters.
+- **Auth.js v5.** GitHub OAuth App, per-user tokens stored on `Account`. No shared PAT in production.
 - **SSE, not WebSocket.** Simpler, proxy-friendly, works on Railway out of the box.
+- **Hybrid party store.** In-memory pub/sub for live SSE subscribers + synchronous DB writes on every update, so state survives a cold start.
 - **One Next.js app.** Single Railway deploy, no CORS hell, no service-mesh ceremony.
-- **GitHub PAT, not OAuth.** Saved ~45 min of auth-flow work. Swap later.
 - **Stateless preview proxy.** The iframe URL encodes `{sandboxUrl, token}` in base64url — no server-side lookup, survives container restarts, load balancers, anything.
 
 ---
@@ -141,13 +142,32 @@ cd patchPartyDaytonaLovable
 
 # 2. Env vars — copy .env.example and fill in
 cp .env.example .env.local
-# ANTHROPIC_API_KEY, DAYTONA_API_KEY, GITHUB_TOKEN, DAYTONA_TARGET=eu
+# Model + sandbox:  ANTHROPIC_API_KEY  DAYTONA_API_KEY  DAYTONA_TARGET
+# Database:         DATABASE_URL  (Postgres — Railway plugin or local docker)
+# Auth:             AUTH_SECRET  AUTH_GITHUB_ID  AUTH_GITHUB_SECRET  AUTH_URL
+# Cron:             CRON_SECRET
 
-# 3. Install + run
-npm install
-npm run dev
-# → http://localhost:3000
+# 3. Install (postinstall auto-generates the Prisma client)
+npm install --legacy-peer-deps
+
+# 4. Migrate the database
+npm run db:migrate            # creates tables in the DB pointed to by DATABASE_URL
+
+# 5. Run
+npm run dev                   # → http://localhost:3000
 ```
+
+### GitHub OAuth App setup
+
+1. Open <https://github.com/settings/developers> → **OAuth Apps → New OAuth App**.
+2. Fill in:
+   - **Application name:** PatchParty (local)
+   - **Homepage URL:** `http://localhost:3000`
+   - **Authorization callback URL:** `http://localhost:3000/api/auth/callback/github`
+3. Generate a client secret; put the ID + secret into `.env.local` as
+   `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`.
+4. For production, create a second OAuth App with your Railway domain as the
+   homepage + callback (`https://<your-domain>/api/auth/callback/github`).
 
 ### Required env vars
 
@@ -156,7 +176,12 @@ npm run dev
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) | Claude API key |
 | `DAYTONA_API_KEY` | [app.daytona.io](https://app.daytona.io) → API Keys | Sandbox provisioning |
 | `DAYTONA_TARGET` | `eu` / `us` / `asia` | Must match your Daytona org region |
-| `GITHUB_TOKEN` | [github.com/settings/tokens](https://github.com/settings/tokens/new) | Classic PAT, scope `repo` |
+| `DATABASE_URL` | Railway Postgres plugin | Full `postgresql://…` URL |
+| `AUTH_SECRET` | `openssl rand -base64 32` | Used to sign session JWTs |
+| `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | GitHub OAuth App | See section above |
+| `AUTH_URL` | set per environment | e.g. `https://patchparty.xyz` in prod |
+| `CRON_SECRET` | `openssl rand -hex 32` | Shared secret for `/api/cron/*` |
+| `GITHUB_TOKEN` | *(optional fallback only)* | Leave empty in production |
 | `NEXT_PUBLIC_APP_URL` | set after first deploy | Only public-facing env var |
 
 ---

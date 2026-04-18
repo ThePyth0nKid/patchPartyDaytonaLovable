@@ -1,16 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/auth'
 import { partyStore } from '@/lib/store'
-import { createPullRequest } from '@/lib/github'
+import {
+  createPullRequest,
+  getOctokitFor,
+  getFallbackOctokit,
+} from '@/lib/github'
 import { getPersona, PersonaId } from '@/lib/personas'
+import { parseBody, PickPatchSchema } from '@/lib/validation'
+import { log } from '@/lib/log'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params
-  const { personaId } = (await req.json()) as { personaId: PersonaId }
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: 'Sign in with GitHub to open a PR.' },
+      { status: 401 },
+    )
+  }
 
-  const party = partyStore.get(id)
+  const { id } = await params
+  const parsed = await parseBody(req, PickPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const personaId = parsed.data.personaId as PersonaId
+
+  const party = await partyStore.get(id)
   if (!party) {
     return NextResponse.json({ error: 'Party not found' }, { status: 404 })
   }
@@ -23,16 +40,16 @@ export async function POST(
     )
   }
 
-  const persona = getPersona(personaId)
+  const gh = await getOctokitFor(session.user.id)
+  const octokit = gh?.octokit ?? getFallbackOctokit()
+  if (!octokit) {
+    return NextResponse.json(
+      { error: 'GitHub account not connected. Re-link from Settings.' },
+      { status: 403 },
+    )
+  }
 
-  // NOTE: Branch was already created + committed in the sandbox.
-  // To actually create a PR, we need to push the branch to GitHub first.
-  // For the hackathon MVP, the branch lives in the ephemeral sandbox only.
-  // The "Create PR" button instead creates the PR directly via GitHub API
-  // using the git contents we have locally.
-  //
-  // TODO POST-HACKATHON: push branch properly from sandbox before calling this.
-  // For demo: fall back to sharing the patch contents.
+  const persona = getPersona(personaId)
 
   const prBody = `## Implemented by PatchParty (${persona.icon} ${persona.name})
 
@@ -47,7 +64,7 @@ ${agent.result.files.map((f) => `- \`${f.path}\` (${f.action})`).join('\n')}
 
 _Generated at PatchParty — choose your patch, skip the vibe._`
 
-  const prUrl = await createPullRequest({
+  const prUrl = await createPullRequest(octokit, {
     owner: party.repoOwner,
     repo: party.repoName,
     title: `${party.issueTitle} [via PatchParty: ${persona.name}]`,
@@ -65,6 +82,9 @@ _Generated at PatchParty — choose your patch, skip the vibe._`
       { status: 500 },
     )
   }
+
+  await partyStore.recordPick(id, personaId, prUrl)
+  log.info('pr opened', { partyId: id, personaId, prUrl })
 
   return NextResponse.json({ prUrl })
 }
