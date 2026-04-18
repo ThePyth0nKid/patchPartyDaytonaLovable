@@ -234,6 +234,7 @@ To wire auto-deploy-on-push: Railway dashboard → service → **Settings → So
 - **No codebase-semantic-context.** Agents see the first N files, not the ones most relevant to the issue. Post-hackathon: embeddings + RAG.
 - **In-memory party store.** Survives within one Railway container. Container restart → orphaned sandboxes (they auto-stop after 15 min).
 - **Only tested against Vite/React repos.** The proxy rewriting assumes Vite dev-server conventions. Next.js / Astro / SvelteKit dev servers will probably need tweaks.
+- **Auth.js is on v5 beta.** The codebase uses the v5 API (`@auth/prisma-adapter` v2, the new `auth.ts` helper). Stable `next-auth@4` is a different API — downgrading would be a rewrite, not a fix. We track the v5 GA and will bump when it ships.
 
 ---
 
