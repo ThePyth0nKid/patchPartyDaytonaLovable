@@ -1,14 +1,30 @@
-# PatchParty 🎉
+# PatchParty
 
 **Choose your patch. Skip the vibe.**
 
-Paste a GitHub issue URL → 5 AI agents implement it **in parallel** inside isolated Daytona sandboxes, each with a distinct engineering philosophy. You inspect the live previews side-by-side and pick the one that matches your taste. One click turns it into a PR.
+[![License: MIT](https://img.shields.io/badge/License-MIT-slategray.svg)](./LICENSE)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
+[![Claude Opus 4.7](https://img.shields.io/badge/Claude-Opus_4.7-orange.svg)](https://anthropic.com)
+[![Daytona Sandboxes](https://img.shields.io/badge/Daytona-Sandboxes-purple.svg)](https://daytona.io)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-Built in one hackday at **AI Builders Berlin**.
+Connect your GitHub, pick an issue from your backlog → five AI agents implement it **in parallel** inside isolated Daytona sandboxes, each with a distinct engineering philosophy. You inspect the live previews side-by-side and pick the one that matches your taste. One click turns it into a PR.
+
+Built in one hackday at **AI Builders Berlin**. Open source under MIT — a side project by [Ultranova.io](https://ultranova.io).
 
 - **Live app:** https://patchparty.dev
 - **Source:** https://github.com/ThePyth0nKid/patchPartyDaytonaLovable
 - **Demo issues:** see [`demo-issues.md`](./demo-issues.md)
+
+---
+
+## Two ways to run it
+
+**Self-host (free).** Clone this repo, bring your own Anthropic + Daytona keys, deploy anywhere Next.js runs. MIT license — no attribution required, no feature gates. See [Local setup](#local-setup) and [Deployment](#deployment-railway).
+
+**Hosted (managed by Ultranova).** Skip the ops. Sign in with GitHub at [patchparty.dev](https://patchparty.dev), pay per party (~50¢ each — Claude + sandbox costs), get priority support and upcoming team features.
+
+Same code path on both. Open source funds the hosted tier; the hosted tier funds the open source.
 
 ---
 
@@ -20,17 +36,21 @@ PatchParty turns that into a **choice**: five opinionated personas, five differe
 
 ---
 
-## The 5 personas
+## Personas and squads
 
-Each is a distinct philosophy, not just a prompt tweak. They live in [`src/lib/personas/index.ts`](./src/lib/personas/index.ts) — the soul of the product.
+Seven squads total — Haiku 4.5 classifies your issue and picks one. Five agents run in parallel, each with a distinct system prompt (not prompt tweaks — full philosophy differences). The full roster lives in [`src/lib/personas/index.ts`](./src/lib/personas/index.ts).
 
-| | Persona | Philosophy | Typical output |
-|---|---|---|---|
-| 🔨 | **Hackfix** | Ship it. | Minimal diff, no tests, no comments |
-| 🧱 | **Craftsman** | Make it proud. | Typed, tested, documented, edge cases |
-| 🎨 | **UX-King** | Users first. | Loading/error states, a11y, micro-animations |
-| 🛡 | **Defender** | What if attacked? | Input validation, rate-limits, audit-log |
-| 💡 | **Innovator** | What if we went further? | Base impl + 2 bonus features |
+**Specialist squads (six):** Frontend · Backend · Security · Fullstack · Bug-Fix · Infrastructure — each with five personas tuned for that category.
+
+**Philosophy squad (fallback).** When the orchestrator can't classify to a specialist, these five step in:
+
+| Persona | Philosophy | Typical output |
+|---|---|---|
+| **Hackfix** | Ship it. | Minimal diff, no tests, no comments |
+| **Craftsman** | Make it proud. | Typed, tested, documented, edge cases |
+| **UX-King** | Users first. | Loading/error states, a11y, micro-animations |
+| **Defender** | What if attacked? | Input validation, rate-limits, audit-log |
+| **Innovator** | What if we went further? | Base impl + 2 bonus features |
 
 ---
 
@@ -129,7 +149,7 @@ If you're ever embedding Daytona sandboxes in an iframe on your own domain, star
 - **Daytona SDK 0.20.2** for sandboxes
 - **Octokit** for GitHub (issues + PRs)
 - **Tailwind CSS** for styling
-- **Railway** for hosting · **Cloudflare** for the custom domain (`patchparty.xyz`, optional)
+- **Railway** for hosting · **Cloudflare** for the custom domain (`patchparty.dev`, optional)
 
 ---
 
@@ -179,7 +199,7 @@ npm run dev                   # → http://localhost:3000
 | `DATABASE_URL` | Railway Postgres plugin | Full `postgresql://…` URL |
 | `AUTH_SECRET` | `openssl rand -base64 32` | Used to sign session JWTs |
 | `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET` | GitHub OAuth App | See section above |
-| `AUTH_URL` | set per environment | e.g. `https://patchparty.xyz` in prod |
+| `AUTH_URL` | set per environment | e.g. `https://patchparty.dev` in prod |
 | `CRON_SECRET` | `openssl rand -hex 32` | Shared secret for `/api/cron/*` |
 | `GITHUB_TOKEN` | *(optional fallback only)* | Leave empty in production |
 | `NEXT_PUBLIC_APP_URL` | set after first deploy | Only public-facing env var |
@@ -222,12 +242,25 @@ To wire auto-deploy-on-push: Railway dashboard → service → **Settings → So
 1. **0-12s · Hook** — "46 % of production code is AI-generated. Bugs are up 1.7×. Every Claude gives the same answer. That's a monoculture."
 2. **12-25s · Solution** — "PatchParty runs five opinionated engineers in parallel. You see what they each build, live. You pick."
 3. **25-70s · Live demo** — paste an issue, watch five cards go green, open two side-by-side, click "Pick UX-King".
-4. **70-90s · Close** — PR URL on screen. "Not replacing judgement. Restoring it. [patchparty.xyz](https://patchparty.xyz)."
+4. **70-90s · Close** — PR URL on screen. "Not replacing judgement. Restoring it. [patchparty.dev](https://patchparty.dev)."
 
 Full list of pre-prepared demo issues: [`demo-issues.md`](./demo-issues.md).
 
 ---
 
+## Contributing
+
+PRs welcome. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for local setup, PR etiquette, and how to add a new persona or squad.
+
+Good first issues:
+- Port the preview proxy for Next.js / Astro / SvelteKit dev servers (see Known gaps).
+- Add a persona to an existing squad (copy the shape in `src/lib/personas/index.ts`).
+- Docker setup — write a `Dockerfile` so self-hosters can `docker run` instead of Nixpacks.
+
+## Security
+
+Found a vulnerability? Please do **not** file a public issue. See [`SECURITY.md`](./SECURITY.md) — report to `nelson@ultranova.io`.
+
 ## License
 
-MIT. Built fast at AI Builders Berlin.
+MIT — see [`LICENSE`](./LICENSE). Built fast at AI Builders Berlin. Maintained by [Nelson Mehlis](https://github.com/ThePyth0nKid) / [Ultranova.io](https://ultranova.io).
