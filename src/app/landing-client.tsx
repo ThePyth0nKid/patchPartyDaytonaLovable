@@ -53,27 +53,27 @@ const STATS = [
 const FAQS = [
   {
     q: 'How is this different from CodeRabbit?',
-    a: 'CodeRabbit reviews one PR that already exists. PatchParty generates five alternatives for you to choose from — different category. One is a gate, the other is a menu.',
+    a: 'CodeRabbit grades a PR that already exists — one option, thumbs up or thumbs down. PatchParty gives you five options before anything is committed. Different category entirely: one is a gate, the other is a menu.',
   },
   {
     q: 'Does this actually scale cost-wise?',
-    a: 'Five Opus calls plus five sandbox-seconds lands around fifty cents per party. An order of magnitude cheaper than a senior engineer review — and the senior still picks.',
+    a: 'Five Opus calls plus five sandbox-seconds lands around fifty cents per party. That is an order of magnitude cheaper than a senior engineer review — and the senior still picks.',
   },
   {
     q: 'What if all five agents write similar code?',
-    a: 'Every squad is built adversarially. The Frontend squad pits a Minimalist against a Motion designer; Security pits OWASP against Zero-Trust. Philosophy — our fallback — runs Hackfix against Defender. Contradicting philosophies by design, so the diffs diverge hard.',
+    a: 'Every squad is built adversarially. Frontend pits a Minimalist against a Motion designer. Security pits OWASP against Zero-Trust. Philosophy — our fallback — runs Hackfix against Defender. You would never hire all five; that is exactly why the diffs diverge.',
   },
   {
     q: 'Wait — five agents, but thirty specialists?',
-    a: 'Every party runs five agents in parallel. But which five depends on your issue. A CSS bug pulls the Frontend squad — Minimalist, Motion, A11y, System, Platform CSS. A webhook bug pulls the Backend squad. Six squads × five specialists = thirty possible personas, one squad per run.',
+    a: 'Five agents per party, always. Which five depends on the issue. A CSS regression pulls Frontend — Minimalist, Motion, A11y, System, Platform CSS. A webhook bug pulls Backend. Six squads × five specialists = thirty personas in the roster. Five on the field each run.',
   },
   {
     q: 'Do I need to trust an AI with my repo?',
-    a: 'Each agent runs in an ephemeral Daytona sandbox, scoped to a shallow clone. Nothing leaves until you pick a winner and click PR — then it is a normal GitHub pull request against a branch you can revert.',
+    a: 'Each agent runs in an ephemeral Daytona sandbox against a shallow clone. Nothing touches your repo until you pick a winner and click PR — at which point it is a normal GitHub pull request against a branch you can revert, review, or ignore.',
   },
   {
     q: 'Can I self-host this?',
-    a: 'Yes — the whole thing is MIT. Clone the repo, bring your own Anthropic and Daytona keys, deploy anywhere Next.js runs. Or skip the ops and use the hosted version we run — same code path, none of the wiring.',
+    a: 'Yes. The whole thing is MIT. Clone the repo, bring your own Anthropic and Daytona keys, deploy anywhere Next.js runs. Or skip the ops and use the hosted version — same code path, none of the wiring.',
   },
 ]
 
@@ -204,13 +204,15 @@ export default function LandingClient() {
 
           {/* Subhead */}
           <p className="mt-8 text-[17px] md:text-xl text-slate-100 max-w-2xl leading-relaxed">
-            In 2026, <span className="text-white font-semibold">46%</span> of code is AI-written — and those PRs
-            carry <span className="text-white font-semibold">1.7×</span> more bugs. The bottleneck isn&apos;t
-            generation anymore. It&apos;s selection.
+            Almost half of all code shipped in 2026 is AI-written — and those PRs carry{' '}
+            <span className="text-white font-semibold">1.7×</span> more bugs than human ones. The
+            bottleneck moved. Writing code is not the hard part anymore; picking which AI-written
+            version is actually right is.
           </p>
           <p className="mt-4 text-[17px] md:text-xl text-slate-300 max-w-2xl leading-relaxed">
-            PatchParty gives you five. Not five generalists — five specialists matched to your issue,
-            in parallel, in sandboxes, in under three minutes. You pick the winner.
+            PatchParty gives you five at once. Not five generalists riffing on the same prompt —
+            five specialists matched to your issue, each in their own sandbox, each with a live
+            preview you can click. Three minutes from issue to pick.
           </p>
 
           {/* CTA */}
@@ -218,7 +220,7 @@ export default function LandingClient() {
             <div className="flex items-center gap-2 mb-3">
               <Terminal className="w-3.5 h-3.5 text-slate-300" />
               <label className="text-[12px] font-mono font-medium uppercase tracking-[0.18em] text-slate-300">
-                Connect GitHub, pick an issue, let them race
+                Sign in, pick any open issue, watch five fixes race
               </label>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 items-start">
@@ -238,8 +240,9 @@ export default function LandingClient() {
               </a>
             </div>
             <p className="mt-4 text-[12.5px] text-slate-400 max-w-md">
-              We ask for read access to your issues and push access only on
-              branches we create. Nothing merges until you click.
+              Read-only on your repos. The only thing we ever push is a branch named
+              <code className="mx-1 px-1 py-0.5 rounded bg-slate-900 border border-slate-800 font-mono text-[11px]">patchparty/&lt;issue&gt;</code>
+              — and even that does not merge until you click.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono font-medium uppercase tracking-[0.14em] text-slate-300">
               <TrustMark>Claude Opus 4.7</TrustMark>
@@ -253,7 +256,7 @@ export default function LandingClient() {
           {/* Persona row (characters, not emoji soup) */}
           <div className="mt-20 pt-10 border-t border-slate-800/60">
             <div className="text-[12px] font-mono font-medium uppercase tracking-[0.18em] text-slate-300 mb-5">
-              The fallback squad — when nothing else fits
+              The fallback — when the issue does not fit a specialist squad
             </div>
             <div className="flex flex-wrap gap-3">
               {PERSONAS.map((p) => {
@@ -294,9 +297,10 @@ export default function LandingClient() {
             <span className="text-slate-500"> No vibes required.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-[15px] md:text-[16px] text-slate-300 leading-relaxed">
-            Haiku reads the issue. Picks the right squad — one of six specialists, or Philosophy as
-            fallback. Five sandboxes spin up in parallel. Previews arrive in under three minutes.
-            You choose. We PR.
+            A lightweight Haiku pass reads the issue and picks the right squad — Frontend, Backend,
+            Security, Fullstack, Bug-Fix, Infrastructure, or Philosophy when nothing else fits. Five
+            Opus agents fan out into five Daytona sandboxes. You get live previews, side-by-side
+            diffs, and a Pick button. Everything else is ceremony.
           </p>
 
           <WorkflowDiagram />
@@ -322,9 +326,10 @@ export default function LandingClient() {
               <span className="text-slate-500"> — when nothing else fits.</span>
             </h2>
             <p className="text-slate-400 max-w-md text-[15px] leading-relaxed">
-              If the orchestrator can&apos;t classify your issue into a specialist squad, these five
-              step in. Contradicting philosophies on purpose — the diffs diverge hard, and that is
-              the feature.
+              When an issue is too abstract or too cross-cutting to route to a specialist squad,
+              Philosophy runs. These five contradict each other on purpose. You would never hire
+              all of them — which is exactly why seeing their diffs side-by-side makes the call
+              obvious.
             </p>
           </div>
 
@@ -383,9 +388,9 @@ export default function LandingClient() {
               <span className="text-slate-500"> Five specialists.</span>
             </h2>
             <p className="text-slate-400 max-w-md text-[15px] leading-relaxed">
-              We classify your issue, then pick the whole squad. A frontend bug gets five frontend
-              engineers. A security review gets five threat models. One squad, five deep takes,
-              zero compromises.
+              The orchestrator reads the issue, then picks the whole squad — not a mix. A CSS
+              regression gets five frontend engineers. An auth bug gets five threat models. One
+              squad, five takes from inside the same discipline, so the comparison is actually fair.
             </p>
           </div>
 
@@ -455,8 +460,8 @@ export default function LandingClient() {
           <div className="mt-10 flex items-start gap-3 max-w-2xl">
             <Sparkles className="w-4 h-4 text-[#A78BFA] shrink-0 mt-1 drop-shadow-[0_0_8px_#A78BFA]" />
             <p className="text-[14px] text-slate-400 leading-relaxed">
-              Can&apos;t classify the issue? You get the all-trades philosophy squad — Hackfix,
-              Craftsman, UX-King, Defender, Innovator.
+              Issue too vague for any of the six? Philosophy takes it — five generalists hand-picked
+              to disagree with each other.
             </p>
           </div>
         </div>
@@ -499,9 +504,9 @@ export default function LandingClient() {
           <div className="mt-12 flex items-start gap-3 max-w-2xl">
             <Sparkles className="w-4 h-4 text-[#A78BFA] shrink-0 mt-1 drop-shadow-[0_0_8px_#A78BFA]" />
             <p className="text-[14px] text-slate-300 leading-relaxed">
-              Anthropic shipped their own code-review tool in March because Claude Code produced so
-              many PRs that enterprise teams were drowning. The fix isn&apos;t more review — it&apos;s
-              more choice, earlier.
+              Anthropic shipped their own code-review product in March. The reason, per the launch
+              post, was that Claude Code PRs were outpacing any team&apos;s ability to review them.
+              More review was never going to fix that. More <em>choice</em>, earlier, might.
             </p>
           </div>
         </div>
@@ -546,9 +551,9 @@ export default function LandingClient() {
             <span className="text-slate-500"> Self-host, or let us run it.</span>
           </h2>
           <p className="mt-6 max-w-2xl text-[15px] md:text-[16px] text-slate-300 leading-relaxed">
-            The whole thing is MIT. Fork it, bring your own Anthropic and Daytona keys, deploy
-            anywhere Next.js runs. Or skip the ops and let Ultranova host it — same code path,
-            none of the wiring.
+            MIT, every line. Clone it, bring your own Anthropic and Daytona keys, deploy anywhere
+            Next.js runs. Or let Ultranova host it for you — same agents, same squads, none of the
+            Railway + Postgres + OAuth wiring.
           </p>
 
           <div className="mt-16 grid md:grid-cols-2 gap-5">
@@ -662,8 +667,8 @@ export default function LandingClient() {
               </span>
             </h2>
             <p className="mt-6 text-slate-200 max-w-lg mx-auto text-[15px] leading-relaxed">
-              Connect GitHub once. Pick an issue from your backlog. Watch five versions compile live,
-              then pick the one you would ship.
+              GitHub sign-in, one issue from your backlog, three minutes. Five working previews
+              side-by-side, and a button to ship the one you would have written yourself.
             </p>
             <a
               href="#top"
@@ -691,8 +696,9 @@ export default function LandingClient() {
               </span>
             </div>
             <p className="text-[13px] text-slate-300 leading-relaxed max-w-sm">
-              A decision interface for the agent era. Built in one day at Factory Berlin for
-              AI Builders Berlin Hackday 2026. Open source under MIT — a side project by{' '}
+              A decision interface for the agent era. Built in one day at Factory Berlin for the
+              AI Builders Hackday 2026, kept alive because the idea would not shut up. Open source
+              under MIT — maintained by{' '}
               <a
                 href="https://ultranova.io"
                 target="_blank"
