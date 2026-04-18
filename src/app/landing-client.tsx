@@ -19,6 +19,7 @@ import {
   Layers,
   MousePointerClick,
   Server,
+  Trophy,
 } from 'lucide-react'
 import { PHILOSOPHY_PERSONAS as PERSONAS } from '@/lib/personas'
 
@@ -180,14 +181,29 @@ export default function LandingClient() {
       <section className="relative overflow-hidden border-b border-slate-800/60">
         <GridBackground />
         <div className="max-w-6xl mx-auto px-6 pt-20 pb-24 md:pt-28 md:pb-32 relative">
-          {/* Eyebrow */}
-          <div className="flex items-center gap-2.5 mb-10">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E879F9] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E879F9] shadow-[0_0_12px_2px_#E879F9]" />
-            </span>
-            <span className="text-[12px] font-mono font-medium uppercase tracking-[0.18em] text-slate-200">
-              Live at Factory Berlin · AI Hackday 2026
+          {/* Eyebrow — Hackathon winner badge */}
+          <div className="mb-10 flex flex-wrap items-center gap-3">
+            <a
+              href="https://ai-builders-berlin.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#A78BFA]/50 bg-gradient-to-r from-[#E879F9]/10 via-[#A78BFA]/15 to-[#60A5FA]/10 backdrop-blur hover:border-[#A78BFA] transition-colors"
+            >
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-full opacity-40 group-hover:opacity-70 transition-opacity"
+                style={{ background: 'radial-gradient(circle at 30% 50%, rgba(232,121,249,0.35), transparent 60%)' }}
+              />
+              <Trophy
+                className="relative w-3.5 h-3.5 text-[#E879F9] drop-shadow-[0_0_8px_#E879F9]"
+                strokeWidth={2}
+              />
+              <span className="relative text-[11px] font-mono font-semibold uppercase tracking-[0.18em] bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] bg-clip-text text-transparent">
+                Winner · AI Builders Hackday Berlin · Apr 2026
+              </span>
+            </a>
+            <span className="hidden sm:inline text-[11px] font-mono font-medium uppercase tracking-[0.18em] text-slate-400">
+              Daytona × Lovable · Factory Berlin · 17.04.2026
             </span>
           </div>
 
@@ -245,11 +261,11 @@ export default function LandingClient() {
               — and even that does not merge until you click.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-mono font-medium uppercase tracking-[0.14em] text-slate-300">
+              <TrustMark>1st place · Berlin 04/2026</TrustMark>
               <TrustMark>Claude Opus 4.7</TrustMark>
               <TrustMark>Daytona Sandboxes</TrustMark>
               <TrustMark>~50¢ / party</TrustMark>
               <TrustMark>Open source · MIT</TrustMark>
-              <TrustMark>Public & private repos</TrustMark>
             </div>
           </div>
 
@@ -696,9 +712,10 @@ export default function LandingClient() {
               </span>
             </div>
             <p className="text-[13px] text-slate-300 leading-relaxed max-w-sm">
-              A decision interface for the agent era. Built in one day at Factory Berlin for the
-              AI Builders Hackday 2026, kept alive because the idea would not shut up. Open source
-              under MIT — maintained by{' '}
+              A decision interface for the agent era. Built in one day at Factory Berlin for the{' '}
+              <span className="text-slate-50 font-medium">AI Builders Hackday 2026</span>
+              {' '}— and it won. Daytona × Lovable track, 17.04.2026. Kept alive because the idea
+              would not shut up. Open source under MIT — maintained by{' '}
               <a
                 href="https://ultranova.io"
                 target="_blank"
@@ -736,6 +753,11 @@ export default function LandingClient() {
               <li>
                 <a href="https://daytona.io" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-slate-50 transition-colors">
                   Daytona <ArrowUpRight className="w-3 h-3" />
+                </a>
+              </li>
+              <li>
+                <a href="https://lovable.dev" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-slate-50 transition-colors">
+                  Lovable <ArrowUpRight className="w-3 h-3" />
                 </a>
               </li>
               <li>
