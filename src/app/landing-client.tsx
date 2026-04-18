@@ -567,8 +567,8 @@ export default function LandingClient() {
               </span>
             </h2>
             <p className="mt-6 text-slate-200 max-w-lg mx-auto text-[15px] leading-relaxed">
-              Open an issue URL. Watch five versions of your future compile live. Pick the one you
-              would ship.
+              Connect GitHub once. Pick an issue from your backlog. Watch five versions compile live,
+              then pick the one you would ship.
             </p>
             <a
               href="#top"
@@ -824,10 +824,10 @@ function WorkflowDiagram() {
       />
 
       <div className="relative px-5 py-10 md:px-12 md:py-14 flex flex-col items-center gap-6 md:gap-7">
-        {/* 1. Issue URL */}
+        {/* 1. Pick issue from active repo */}
         <WorkflowNode
-          label="01 · Paste"
-          title="Issue URL"
+          label="01 · Pick"
+          title="Issue from your active repo"
           icon={FileText}
           accent="#A78BFA"
         />
