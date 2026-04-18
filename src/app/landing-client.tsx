@@ -71,6 +71,10 @@ const FAQS = [
     q: 'Do I need to trust an AI with my repo?',
     a: 'Each agent runs in an ephemeral Daytona sandbox, scoped to a shallow clone. Nothing leaves until you pick a winner and click PR — then it is a normal GitHub pull request against a branch you can revert.',
   },
+  {
+    q: 'Can I self-host this?',
+    a: 'Yes — the whole thing is MIT. Clone the repo, bring your own Anthropic and Daytona keys, deploy anywhere Next.js runs. Or skip the ops and use the hosted version we run — same code path, none of the wiring.',
+  },
 ]
 
 type SquadDisplay = {
@@ -157,6 +161,7 @@ export default function LandingClient() {
             <a href="#how" className="hidden sm:inline hover:text-slate-50 transition-colors">How it works</a>
             <a href="#personas" className="hidden sm:inline hover:text-slate-50 transition-colors">Personas</a>
             <a href="#squads" className="hidden sm:inline hover:text-slate-50 transition-colors">Squads</a>
+            <a href="#run-it" className="hidden sm:inline hover:text-slate-50 transition-colors">Self-host</a>
             <a href="#faq" className="hidden sm:inline hover:text-slate-50 transition-colors">FAQ</a>
             <a
               href="https://github.com/ThePyth0nKid/patchPartyDaytonaLovable"
@@ -529,6 +534,93 @@ export default function LandingClient() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* DUAL PATH: Self-host vs Hosted */}
+      <section id="run-it" className="border-b border-slate-800/60">
+        <div className="max-w-6xl mx-auto px-6 py-24 md:py-32">
+          <SectionEyebrow num="06" label="Two ways to run it" />
+          <h2 className="mt-6 text-4xl md:text-6xl font-semibold tracking-[-0.02em] max-w-3xl">
+            Open source.
+            <span className="text-slate-500"> Self-host, or let us run it.</span>
+          </h2>
+          <p className="mt-6 max-w-2xl text-[15px] md:text-[16px] text-slate-300 leading-relaxed">
+            The whole thing is MIT. Fork it, bring your own Anthropic and Daytona keys, deploy
+            anywhere Next.js runs. Or skip the ops and let Ultranova host it — same code path,
+            none of the wiring.
+          </p>
+
+          <div className="mt-16 grid md:grid-cols-2 gap-5">
+            {/* Self-host card */}
+            <div className="group relative p-8 bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl hover:border-slate-600 transition-all">
+              <div className="flex items-center gap-2.5 mb-5">
+                <Terminal className="w-5 h-5 text-slate-300" strokeWidth={1.75} />
+                <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-slate-300">
+                  Self-host
+                </div>
+              </div>
+              <div className="text-3xl md:text-4xl font-semibold tracking-[-0.02em] mb-4">
+                Free
+                <span className="text-slate-500 text-xl"> — bring your keys</span>
+              </div>
+              <ul className="space-y-3 text-[14px] text-slate-300">
+                <li className="flex items-start gap-2"><span className="text-slate-500">·</span> MIT license, no attribution required</li>
+                <li className="flex items-start gap-2"><span className="text-slate-500">·</span> Your Anthropic + Daytona keys, your bill</li>
+                <li className="flex items-start gap-2"><span className="text-slate-500">·</span> Runs on Railway, Vercel, Docker, your box</li>
+                <li className="flex items-start gap-2"><span className="text-slate-500">·</span> Every persona and squad, nothing gated</li>
+              </ul>
+              <a
+                href="https://github.com/ThePyth0nKid/patchPartyDaytonaLovable"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8 inline-flex items-center gap-2 text-[14px] font-semibold text-slate-50 hover:text-white transition-colors"
+              >
+                <Github className="w-4 h-4" />
+                Clone the repo
+                <ArrowUpRight className="w-4 h-4" />
+              </a>
+            </div>
+
+            {/* Hosted card */}
+            <div className="group relative p-8 bg-gradient-to-br from-slate-900/80 to-slate-900/40 backdrop-blur border border-slate-700 rounded-xl hover:border-[#A78BFA]/60 transition-all overflow-hidden">
+              <div
+                aria-hidden
+                className="absolute -top-20 -right-20 w-60 h-60 rounded-full opacity-40 group-hover:opacity-70 transition-opacity"
+                style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.25), transparent 70%)' }}
+              />
+              <div className="relative">
+                <div className="flex items-center gap-2.5 mb-5">
+                  <Cloud className="w-5 h-5 text-[#A78BFA] drop-shadow-[0_0_8px_#A78BFA]" strokeWidth={1.75} />
+                  <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA]">
+                    Hosted · Managed by Ultranova
+                  </div>
+                </div>
+                <div className="text-3xl md:text-4xl font-semibold tracking-[-0.02em] mb-4">
+                  ~50¢
+                  <span className="text-slate-500 text-xl"> / party</span>
+                </div>
+                <ul className="space-y-3 text-[14px] text-slate-200">
+                  <li className="flex items-start gap-2"><span className="text-slate-500">·</span> We run the agents, you click Party</li>
+                  <li className="flex items-start gap-2"><span className="text-slate-500">·</span> Zero setup — sign in with GitHub, pick an issue</li>
+                  <li className="flex items-start gap-2"><span className="text-slate-500">·</span> Usage-based — pay only for parties you run</li>
+                  <li className="flex items-start gap-2"><span className="text-slate-500">·</span> Priority support, team features coming</li>
+                </ul>
+                <a
+                  href="/login"
+                  className="mt-8 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 rounded-[7px] font-semibold text-black text-[13px] transition-all ease-linear duration-200 shadow-[0_8px_24px_-8px_rgba(167,139,250,0.6)]"
+                >
+                  Throw a party now
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-10 text-[13px] text-slate-400 max-w-2xl">
+            Same code path on both. Open source funds the hosted tier; the hosted tier funds the
+            open source. That is the deal.
+          </p>
         </div>
       </section>
 
