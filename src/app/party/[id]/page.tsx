@@ -4,7 +4,7 @@ import { use, useEffect, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
-import { Party, AgentState, PartyStreamEvent } from '@/lib/types'
+import { Party, AgentState, PartyEvent } from '@/lib/types'
 
 const PERSONA_ACCENTS: Record<string, string> = {
   hackfix: '#FF6B35',
@@ -185,7 +185,7 @@ export default function PartyPage({
       try {
         const event = JSON.parse(ev.data) as
           | { type: 'initial'; party: Party }
-          | PartyStreamEvent
+          | PartyEvent
         if (event.type === 'initial') {
           setParty(event.party)
         } else if (event.type === 'agent_update') {
