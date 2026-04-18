@@ -123,7 +123,7 @@ In 2026, 46% of production code is AI-generated, and those pull requests carry 1
 
 Built in **one hackday at AI Builders Berlin** (Factory Berlin Mitte, April 2026). Solo builder. Single Next.js app. Deployed on Railway. Live today.
 
-- Live: https://patchparty-production.up.railway.app
+- Live: https://patchparty.dev
 - Source: https://github.com/ThePyth0nKid/patchPartyDaytonaLovable
 - Domain option: `patchparty.xyz`
 

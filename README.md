@@ -6,7 +6,7 @@ Paste a GitHub issue URL → 5 AI agents implement it **in parallel** inside iso
 
 Built in one hackday at **AI Builders Berlin**.
 
-- **Live app:** https://patchparty-production.up.railway.app
+- **Live app:** https://patchparty.dev
 - **Source:** https://github.com/ThePyth0nKid/patchPartyDaytonaLovable
 - **Demo issues:** see [`demo-issues.md`](./demo-issues.md)
 
