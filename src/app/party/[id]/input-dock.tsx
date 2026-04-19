@@ -34,16 +34,22 @@ export function InputDock({
   canSend,
 }: InputDockProps) {
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
+    // Gate on canSend so Enter on an empty/atCap draft doesn't swallow the
+    // keystroke. Shift+Enter = newline; Cmd+Enter is reserved for future
+    // power-user binding and currently falls through to the browser default.
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && canSend) {
       e.preventDefault()
       onSend()
     }
   }
 
   function insertTemplate(prompt: string) {
-    // Replace the draft wholesale — the UX spec §5 says "insert template",
-    // and mixing a chip template with existing draft text would produce
-    // noisy prompts. User can still edit freely after insert.
+    // Full-replace semantics (not append): chip templates are self-contained
+    // prompts per UX spec §5. Appending to an existing draft would produce
+    // ambiguous mixed instructions. If the user had half a draft and hits
+    // a chip, they lose that draft — the chip set is small enough that
+    // misclicks are rare, and an undo-draft affordance isn't worth the
+    // complexity for v2.1.
     onDraftChange(prompt)
   }
 
@@ -63,6 +69,7 @@ export function InputDock({
           disabled={!!disabled || sending}
           rows={2}
           placeholder={placeholder}
+          aria-label={placeholder}
           className="flex-1 resize-none bg-slate-950 border border-slate-800 rounded-[7px] px-3 py-2 text-[13px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 disabled:opacity-60"
         />
         <button

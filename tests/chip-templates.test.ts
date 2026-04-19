@@ -70,6 +70,23 @@ test('chip-row.tsx defines exactly 5 chips with the locked IDs', () => {
   }
 })
 
+test('chip-row.tsx: every `prompt:` literal in the file is free of ${…}', () => {
+  // Defense-in-depth vs. the CHIP_TEMPLATES-only scan above: a contributor
+  // could introduce a second constant with a similar shape (e.g.
+  // `EXTRA_CHIPS`) that escapes the named-slice regex. This test catches
+  // any `prompt: \`…${x}…\`` line in the whole file.
+  const src = readSource('../src/app/party/[id]/chip-row.tsx')
+  // Match `prompt:` followed by a template literal containing ${…}. We
+  // allow plain backtick strings (markdown code spans) — only flag the
+  // interpolation shape.
+  const offender = /prompt\s*:\s*`[^`]*\$\{[^`]*`/.exec(src)
+  assert.equal(
+    offender,
+    null,
+    `chip-row.tsx contains an interpolated prompt literal: ${offender?.[0] ?? ''}`,
+  )
+})
+
 test('chip-row.tsx prompts do not reference repo / party / file identifiers', () => {
   const src = readSource('../src/app/party/[id]/chip-row.tsx')
 

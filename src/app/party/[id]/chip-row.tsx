@@ -101,7 +101,9 @@ export function ChipRow({
             }}
             className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-[5px] border border-slate-700 text-[11px] font-mono uppercase tracking-[0.14em] text-slate-300 hover:border-slate-500 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-slate-700 disabled:hover:text-slate-300 transition-colors"
           >
-            {chip.icon}
+            <span aria-hidden="true" className="inline-flex">
+              {chip.icon}
+            </span>
             {chip.label}
           </button>
         )
