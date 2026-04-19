@@ -15,6 +15,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { Daytona, type Sandbox } from '@daytonaio/sdk'
+import * as posixPath from 'node:path/posix'
 import { getPersona, PersonaId } from './personas'
 import { prisma } from './prisma'
 import { loadKey } from './byok'
@@ -23,7 +24,29 @@ import { markActivity } from './sandbox-lifecycle'
 import { log } from './log'
 import { computeCost, RATES } from './costing'
 
-const daytona = new Daytona()
+/**
+ * Resolve a model-supplied path against the sandbox repo root, refusing
+ * any value that would escape the directory. Prevents Claude (or a prompt
+ * injection inside file content Claude reads) from tricking us into
+ * read/write of /etc/passwd, ~/.ssh/*, etc.
+ */
+function safeSandboxPath(repoDir: string, userPath: string): string | null {
+  if (typeof userPath !== 'string' || userPath.length === 0) return null
+  if (userPath.includes('\0')) return null
+  // Reject absolute paths outright; we only accept repo-relative values.
+  if (userPath.startsWith('/')) return null
+  const resolved = posixPath.normalize(`${repoDir}/${userPath}`)
+  const root = repoDir.endsWith('/') ? repoDir : `${repoDir}/`
+  if (resolved !== repoDir && !resolved.startsWith(root)) return null
+  return resolved
+}
+
+// Lazy singleton — see sandbox-lifecycle.ts for rationale (build-time import).
+let _daytona: Daytona | null = null
+function getDaytona(): Daytona {
+  if (!_daytona) _daytona = new Daytona()
+  return _daytona
+}
 
 export const MAX_TURNS_PER_PARTY = 20
 export const TOOL_LOOP_CAP = 8
@@ -155,8 +178,12 @@ async function executeTool(
 ): Promise<{ output: string; isError: boolean; applied?: string }> {
   if (name === 'read_file') {
     const { path } = input as { path: string }
+    const safe = safeSandboxPath(repoDir, path)
+    if (!safe) {
+      return { output: `read_file refused: path "${path}" escapes the repo root.`, isError: true }
+    }
     try {
-      const buf = await sandbox.fs.downloadFile(`${repoDir}/${path}`)
+      const buf = await sandbox.fs.downloadFile(safe)
       const text = buf.toString('utf-8')
       return { output: text.slice(0, 20_000), isError: false }
     } catch (error: unknown) {
@@ -170,6 +197,10 @@ async function executeTool(
       mode: 'replace' | 'patch'
       content: string
     }
+    const safe = safeSandboxPath(repoDir, path)
+    if (!safe) {
+      return { output: `apply_edit refused: path "${path}" escapes the repo root.`, isError: true }
+    }
     const lineCount = content.split('\n').length
     if (lineCount > MAX_EDIT_LINES) {
       return {
@@ -179,17 +210,14 @@ async function executeTool(
     }
     try {
       if (mode === 'replace') {
-        await sandbox.fs.uploadFile(
-          Buffer.from(content, 'utf-8'),
-          `${repoDir}/${path}`,
-        )
+        await sandbox.fs.uploadFile(Buffer.from(content, 'utf-8'), safe)
         return { output: `Wrote ${path} (${lineCount} lines).`, isError: false, applied: path }
       }
       // mode=patch — write patch to tmp, git apply --reject, report rejects
       const patchPath = `${repoDir}/.patchparty-chat.patch`
       await sandbox.fs.uploadFile(Buffer.from(content, 'utf-8'), patchPath)
       const applyResult = await sandbox.process.executeCommand(
-        `cd ${repoDir} && git apply --reject --whitespace=fix .patchparty-chat.patch && rm .patchparty-chat.patch`,
+        `cd ${repoDir} && git apply --reject --whitespace=fix .patchparty-chat.patch; rc=$?; rm -f .patchparty-chat.patch; exit $rc`,
       )
       if (applyResult.exitCode !== 0) {
         return {
@@ -278,12 +306,19 @@ async function commitTurn(
   message: string,
 ): Promise<string | undefined> {
   try {
-    const escMessage = message.replace(/"/g, '\\"').slice(0, 200)
+    // Base64-encode the commit message so backticks, $(), and other shell
+    // metacharacters in user input cannot escape into the shell. The shell
+    // only sees the base64 alphabet [A-Za-z0-9+/=].
+    const truncated = message.slice(0, 200)
+    const encoded = Buffer.from(truncated, 'utf-8').toString('base64')
     const exec = await sandbox.process.executeCommand(
-      `cd ${repoDir} && git add -A && git -c user.email=chat@patchparty.dev -c user.name="PatchParty Chat" commit -m "chat: ${escMessage}" || echo 'nothing-to-commit'`,
+      `cd ${repoDir} && git add -A && msg=$(echo ${encoded} | base64 -d) && git -c user.email=chat@patchparty.dev -c user.name="PatchParty Chat" commit -m "chat: $msg" || echo 'nothing-to-commit'`,
     )
     if ((exec.result ?? '').includes('nothing-to-commit')) return undefined
 
+    // Token in URL: short-lived ephemeral push, not stored in git config or
+    // remote URL. Daytona's process logs may capture it — acceptable for v2.0
+    // since Daytona runs in our trust boundary; revisit when isolating.
     const remote = `https://x-access-token:${userToken}@github.com/${party.repoOwner}/${party.repoName}.git`
     await sandbox.process.executeCommand(
       `cd ${repoDir} && git push "${remote}" HEAD:${branch}`,
@@ -354,7 +389,7 @@ export async function* runChatTurn(
   await markActivity(ctx.partyId)
 
   const anthropic = await getAnthropicForUser(ctx.userId)
-  const sandbox = await daytona.get(agent.sandboxId)
+  const sandbox = await getDaytona().get(agent.sandboxId)
   const repoDir = '/home/daytona/repo'
 
   let totalInput = 0
@@ -435,7 +470,19 @@ export async function* runChatTurn(
       messages.push({ role: 'user', content: toolResults })
     }
   } catch (error: unknown) {
-    errorMessage = error instanceof Error ? error.message : String(error)
+    // Redact: Anthropic SDK errors can echo headers/keys into the message
+    // and we yield this string verbatim into the SSE stream.
+    if (error instanceof Anthropic.APIError) {
+      errorMessage = `Anthropic API error (status ${error.status})`
+    } else if (error instanceof Error) {
+      errorMessage = error.name === 'AbortError' ? 'turn aborted' : 'internal error'
+    } else {
+      errorMessage = 'internal error'
+    }
+    log.error('chat.runChatTurn failed', {
+      partyId: ctx.partyId,
+      error: String(error),
+    })
   }
 
   const latencyMs = Date.now() - start

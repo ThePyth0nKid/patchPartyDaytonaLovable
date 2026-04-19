@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { terminateLosers } from '@/lib/sandbox-lifecycle'
@@ -101,6 +102,17 @@ export async function POST(
       }),
     ])
   } catch (error: unknown) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      // Concurrent /pick — unique index on PickDecision.partyId saved us.
+      // Return the clean 409 that a sequential call would have hit above.
+      return NextResponse.json(
+        { error: 'Pick already recorded for this party.' },
+        { status: 409 },
+      )
+    }
     log.error('pick: db write failed', { partyId: id, error: String(error) })
     return NextResponse.json({ error: 'db write failed' }, { status: 500 })
   }

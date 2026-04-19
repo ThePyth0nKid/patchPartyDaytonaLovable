@@ -8,6 +8,7 @@
 // Protected by CRON_SECRET.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { timingSafeEqual } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import {
   IDLE_WARN_AFTER_MIN,
@@ -21,18 +22,28 @@ import { log } from '@/lib/log'
 
 export const dynamic = 'force-dynamic'
 
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
+
 async function authorize(req: NextRequest): Promise<boolean> {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
   const authHeader = req.headers.get('authorization') ?? ''
-  if (authHeader === `Bearer ${secret}`) return true
-  return req.headers.get('x-cron-secret') === secret
+  if (authHeader.startsWith('Bearer ')) {
+    return safeCompare(authHeader.slice(7), secret)
+  }
+  const headerSecret = req.headers.get('x-cron-secret')
+  if (headerSecret) return safeCompare(headerSecret, secret)
+  return false
 }
 
 async function run(): Promise<{
   warned: number
   paused: number
   terminated: number
+  unstuck: number
 }> {
   const now = new Date()
   const warnCutoff = new Date(now.getTime() - IDLE_WARN_AFTER_MIN * 60_000)
@@ -40,12 +51,22 @@ async function run(): Promise<{
   const terminateCutoff = new Date(
     now.getTime() - TERMINATE_AFTER_DAYS * 24 * 3_600_000,
   )
+  // Stuck RESUMING > 5 min: resumeParty caught an error mid-flight but the
+  // rollback hadn't landed in an old build. Force back to PAUSED so cron
+  // and UI can recover.
+  const stuckCutoff = new Date(now.getTime() - 5 * 60_000)
+  const unstuck = await prisma.party.updateMany({
+    where: { sandboxState: 'RESUMING', updatedAt: { lt: stuckCutoff } },
+    data: { sandboxState: 'PAUSED' },
+  })
 
   // ACTIVE → IDLE_WARN
+  // Guard NULL sandboxLastActivityAt: parties that existed before the v2
+  // migration have NULL here and would falsely match `lt: warnCutoff`.
   const toWarn = await prisma.party.findMany({
     where: {
       sandboxState: 'ACTIVE',
-      sandboxLastActivityAt: { lt: warnCutoff },
+      sandboxLastActivityAt: { not: null, lt: warnCutoff },
       chatSessionAgentId: { not: null },
     },
     select: { id: true },
@@ -70,7 +91,7 @@ async function run(): Promise<{
   const toPause = await prisma.party.findMany({
     where: {
       sandboxState: 'IDLE_WARN',
-      sandboxLastActivityAt: { lt: pauseCutoff },
+      sandboxLastActivityAt: { not: null, lt: pauseCutoff },
     },
     select: { id: true },
     take: 50,
@@ -96,6 +117,7 @@ async function run(): Promise<{
     warned: toWarn.length,
     paused: toPause.length,
     terminated: toTerm.length,
+    unstuck: unstuck.count,
   }
 }
 
