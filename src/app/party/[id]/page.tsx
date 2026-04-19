@@ -5,8 +5,7 @@ import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent, PartyState, SandboxState } from '@/lib/types'
-import { ChatPane } from './chat-pane'
-import { ResumeCard } from './resume-card'
+import { IteratePage } from './iterate-page'
 import { csrfFetch } from '@/lib/client-fetch'
 
 const PERSONA_ACCENTS: Record<string, string> = {
@@ -448,42 +447,36 @@ export default function PartyPage({
         </div>
       </section>
 
-      {/* Post-pick: chat-iterate pane + paused/resume card.
-          Rendered inline under the grid so the compare flow stays intact. */}
+      {/* Post-pick: new IteratePage layout (preview ↔ turn column, sticky
+          sandbox banner, viewport toggle). See planning/v2.1-iterate-ux
+          /01-ux-spec.md §1 for the layout spec. */}
       {partyState?.chatSessionAgentId && partyState.pickedPersona && (() => {
         const pickedPersona = PERSONAS.find(
           (p) => p.id === partyState.pickedPersona,
         )
         if (!pickedPersona) return null
         const accent = PERSONA_ACCENTS[pickedPersona.color]
+        const pickedAgent = party.agents[partyState.pickedPersona]
         return (
-          <section className="max-w-7xl mx-auto px-6 pb-12 space-y-4">
-            <ResumeCard
-              partyId={id}
-              sandboxState={partyState.sandboxState}
-              onResumed={() =>
-                setPartyState((s) =>
-                  s ? { ...s, sandboxState: 'ACTIVE' } : s,
-                )
-              }
-            />
-            <ChatPane
-              partyId={id}
-              partyTitle={party.issueTitle}
-              personaId={partyState.pickedPersona}
-              personaName={pickedPersona.name}
-              personaAccent={accent}
-              sandboxState={partyState.sandboxState}
-              disabled={
-                partyState.sandboxState === 'PAUSED' ||
-                partyState.sandboxState === 'TERMINATED' ||
-                partyState.sandboxState === 'RESUMING'
-              }
-              onShipPR={handleShipPr}
-              shippingPr={shippingPr}
-              prUrl={prUrl}
-            />
-          </section>
+          <IteratePage
+            partyId={id}
+            partyTitle={party.issueTitle}
+            personaId={partyState.pickedPersona}
+            personaName={pickedPersona.name}
+            personaAccent={accent}
+            personaIcon={pickedPersona.icon}
+            previewUrl={pickedAgent?.result?.previewUrl}
+            previewToken={pickedAgent?.result?.previewToken}
+            sandboxState={partyState.sandboxState}
+            onSandboxResumed={() =>
+              setPartyState((s) =>
+                s ? { ...s, sandboxState: 'ACTIVE' } : s,
+              )
+            }
+            onShipPR={handleShipPr}
+            shippingPr={shippingPr}
+            prUrl={prUrl}
+          />
         )
       })()}
 
