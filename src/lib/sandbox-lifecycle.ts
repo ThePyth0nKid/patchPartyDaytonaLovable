@@ -169,10 +169,13 @@ export async function resumeParty(partyId: string): Promise<ResumeResult> {
         data: { sandboxState: 'PAUSED' },
       })
       .catch(() => undefined)
+    // Never forward raw SDK errors to the caller — Daytona errors can leak
+    // internal hostnames, sandbox IDs, or token fragments. The full error
+    // is already in the server log for ops triage.
     return {
       ok: false,
       method: 'failed',
-      error: String(error),
+      error: 'Sandbox could not be resumed. Try again in a moment.',
     }
   }
 }

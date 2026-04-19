@@ -77,6 +77,13 @@ export interface PartyClassification {
   selectedPersonas: PersonaId[]
 }
 
+export type SandboxState =
+  | 'ACTIVE'
+  | 'IDLE_WARN'
+  | 'PAUSED'
+  | 'RESUMING'
+  | 'TERMINATED'
+
 export interface Party {
   id: string
   issueUrl: string
@@ -87,6 +94,14 @@ export interface Party {
   createdAt: number
   classification?: PartyClassification
   agents: Partial<Record<PersonaId, AgentState>>
+}
+
+export interface PartyState {
+  chatSessionAgentId: string | null
+  pickedPersona: PersonaId | null
+  sandboxState: SandboxState
+  sandboxPausedAt: string | null
+  sandboxLastActivityAt: string | null
 }
 
 export type PartyEvent =

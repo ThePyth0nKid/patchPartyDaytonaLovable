@@ -4,7 +4,9 @@ import { use, useEffect, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
-import { Party, AgentState, PartyEvent } from '@/lib/types'
+import { Party, AgentState, PartyEvent, PartyState, SandboxState } from '@/lib/types'
+import { ChatPane } from './chat-pane'
+import { ResumeCard } from './resume-card'
 
 const PERSONA_ACCENTS: Record<string, string> = {
   hackfix: '#FF6B35',
@@ -159,6 +161,9 @@ export default function PartyPage({
   const [party, setParty] = useState<Party | null>(null)
   const [connected, setConnected] = useState(false)
   const [selectedPersona, setSelectedPersona] = useState<PersonaId | null>(null)
+  const [partyState, setPartyState] = useState<PartyState | null>(null)
+  const [shippingPr, setShippingPr] = useState(false)
+  const [prUrl, setPrUrl] = useState<string | null>(null)
   const partyRef = useRef<Party | null>(null)
 
   useEffect(() => {
@@ -212,6 +217,50 @@ export default function PartyPage({
 
     return () => es.close()
   }, [id])
+
+  // Poll /state for post-pick lifecycle (chatSessionAgentId + sandboxState).
+  // The SSE stream auto-closes once all personas reach done/error, so we
+  // can't piggy-back on it for the post-pick phase. Poll-every-10s is cheap
+  // (single indexed SELECT) and immediately reflects cron transitions.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch(`/api/party/${id}/state`, { cache: 'no-store' })
+        if (!res.ok) return
+        const data = (await res.json()) as PartyState
+        if (cancelled) return
+        setPartyState(data)
+      } catch {
+        /* swallow — next tick retries */
+      }
+    }
+    void load()
+    const iv = setInterval(load, 10_000)
+    return () => {
+      cancelled = true
+      clearInterval(iv)
+    }
+  }, [id])
+
+  async function handleShipPr() {
+    if (!partyState?.pickedPersona) return
+    setShippingPr(true)
+    try {
+      const res = await fetch(`/api/party/${id}/pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personaId: partyState.pickedPersona }),
+      })
+      const data = await res.json()
+      if (data.prUrl) setPrUrl(data.prUrl)
+      else alert(`PR creation failed: ${data.error ?? 'unknown'}`)
+    } catch (e) {
+      alert(`Error: ${e}`)
+    } finally {
+      setShippingPr(false)
+    }
+  }
 
   if (!party) {
     return (
@@ -379,6 +428,7 @@ export default function PartyPage({
                 persona={persona}
                 agent={agent}
                 selected={selectedPersona === persona.id}
+                locked={!!partyState?.pickedPersona && partyState.pickedPersona !== persona.id}
                 onSelect={() =>
                   agent.status === 'done' && setSelectedPersona(persona.id)
                 }
@@ -388,12 +438,60 @@ export default function PartyPage({
         </div>
       </section>
 
+      {/* Post-pick: chat-iterate pane + paused/resume card.
+          Rendered inline under the grid so the compare flow stays intact. */}
+      {partyState?.chatSessionAgentId && partyState.pickedPersona && (() => {
+        const pickedPersona = PERSONAS.find(
+          (p) => p.id === partyState.pickedPersona,
+        )
+        if (!pickedPersona) return null
+        const accent = PERSONA_ACCENTS[pickedPersona.color]
+        return (
+          <section className="max-w-7xl mx-auto px-6 pb-12 space-y-4">
+            <ResumeCard
+              partyId={id}
+              sandboxState={partyState.sandboxState}
+              onResumed={() =>
+                setPartyState((s) =>
+                  s ? { ...s, sandboxState: 'ACTIVE' } : s,
+                )
+              }
+            />
+            <ChatPane
+              partyId={id}
+              partyTitle={party.issueTitle}
+              personaId={partyState.pickedPersona}
+              personaName={pickedPersona.name}
+              personaAccent={accent}
+              sandboxState={partyState.sandboxState}
+              disabled={
+                partyState.sandboxState === 'PAUSED' ||
+                partyState.sandboxState === 'TERMINATED' ||
+                partyState.sandboxState === 'RESUMING'
+              }
+              onShipPR={handleShipPr}
+              shippingPr={shippingPr}
+              prUrl={prUrl}
+            />
+          </section>
+        )
+      })()}
+
       {/* Compare modal — open as soon as the clicked agent is done */}
       {selectedPersona && (
         <ComparePanel
           party={party}
           selectedPersona={selectedPersona}
+          alreadyPicked={!!partyState?.pickedPersona}
           onClose={() => setSelectedPersona(null)}
+          onPicked={(personaId) => {
+            setPartyState((s) =>
+              s
+                ? { ...s, pickedPersona: personaId, chatSessionAgentId: 'pending' }
+                : s,
+            )
+            setSelectedPersona(null)
+          }}
         />
       )}
     </main>
@@ -404,11 +502,13 @@ function AgentCard({
   persona,
   agent,
   selected,
+  locked,
   onSelect,
 }: {
   persona: (typeof PERSONAS)[number]
   agent: AgentState
   selected: boolean
+  locked: boolean
   onSelect: () => void
 }) {
   const accent = PERSONA_ACCENTS[persona.color]
@@ -425,7 +525,8 @@ function AgentCard({
       className={`
         group relative bg-slate-900/70 backdrop-blur border rounded-[7px] p-5 transition-all duration-200 ease-linear overflow-hidden
         ${selected ? 'border-transparent' : 'border-slate-700/80 hover:border-slate-600'}
-        ${isDone ? 'cursor-pointer hover:-translate-y-1' : ''}
+        ${isDone && !locked ? 'cursor-pointer hover:-translate-y-1' : ''}
+        ${locked ? 'opacity-40 grayscale' : ''}
       `}
       style={{
         boxShadow: selected
@@ -534,11 +635,15 @@ function AgentCard({
 function ComparePanel({
   party,
   selectedPersona,
+  alreadyPicked,
   onClose,
+  onPicked,
 }: {
   party: Party
   selectedPersona: PersonaId
+  alreadyPicked: boolean
   onClose: () => void
+  onPicked: (personaId: PersonaId) => void
 }) {
   const agent = party.agents[selectedPersona]
   const persona = PERSONAS.find((p) => p.id === selectedPersona)!
@@ -546,8 +651,8 @@ function ComparePanel({
   const team = party.classification?.selectedPersonas ?? []
   const candidateIndex = Math.max(0, team.indexOf(selectedPersona)) + 1
   const teamSize = team.length || Object.keys(party.agents).length
-  const [creatingPR, setCreatingPR] = useState(false)
-  const [prUrl, setPrUrl] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
+  const [pickError, setPickError] = useState<string | null>(null)
   if (!agent) return null
   const hasPreview = !!agent.result?.previewUrl
   // Default to preview view if available — that's the wow moment
@@ -556,23 +661,24 @@ function ComparePanel({
   )
 
   async function handlePickThis() {
-    setCreatingPR(true)
+    setPicking(true)
+    setPickError(null)
     try {
-      const res = await fetch(`/api/party/${party.id}/pr`, {
+      const res = await fetch(`/api/party/${party.id}/pick`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personaId: selectedPersona }),
       })
       const data = await res.json()
-      if (data.prUrl) {
-        setPrUrl(data.prUrl)
-      } else {
-        alert(`PR creation failed: ${data.error ?? 'unknown'}`)
+      if (!res.ok || data.ok === false) {
+        setPickError(data.error ?? `Pick failed (${res.status})`)
+        return
       }
+      onPicked(selectedPersona)
     } catch (e) {
-      alert(`Error: ${e}`)
+      setPickError(e instanceof Error ? e.message : String(e))
     } finally {
-      setCreatingPR(false)
+      setPicking(false)
     }
   }
 
@@ -738,37 +844,33 @@ function ComparePanel({
 
         {/* Footer / Action */}
         <div className="px-6 py-5 border-t border-slate-800/60">
-          {prUrl ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2 text-[#14B8A6]">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-[13px] font-semibold">Pull request opened</span>
-              </div>
-              <a
-                href={prUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[13px] font-mono text-[#A78BFA] hover:text-[#C4B5FD] transition-colors"
-              >
-                {prUrl}
-                <ExternalLink className="w-3 h-3" />
-              </a>
+          {alreadyPicked ? (
+            <div className="text-center text-[13px] text-slate-300">
+              A persona has already been picked for this party. Close this
+              panel and continue in the chat below.
             </div>
           ) : (
-            <button
-              onClick={handlePickThis}
-              disabled={creatingPR}
-              className="w-full py-3.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 text-black rounded-[7px] font-semibold text-[14px] disabled:opacity-70 disabled:cursor-not-allowed transition-all ease-linear duration-200 shadow-[0_8px_32px_-8px_rgba(167,139,250,0.6)] hover:shadow-[0_12px_40px_-8px_rgba(167,139,250,0.8)] inline-flex items-center justify-center gap-2"
-            >
-              {creatingPR ? (
-                <>
-                  <Spinner className="w-4 h-4" color="#000" />
-                  Opening pull request…
-                </>
-              ) : (
-                `Pick ${persona.name} — open PR`
+            <>
+              <button
+                onClick={handlePickThis}
+                disabled={picking}
+                className="w-full py-3.5 bg-gradient-to-r from-[#E879F9] via-[#A78BFA] to-[#60A5FA] hover:brightness-110 text-black rounded-[7px] font-semibold text-[14px] disabled:opacity-70 disabled:cursor-not-allowed transition-all ease-linear duration-200 shadow-[0_8px_32px_-8px_rgba(167,139,250,0.6)] hover:shadow-[0_12px_40px_-8px_rgba(167,139,250,0.8)] inline-flex items-center justify-center gap-2"
+              >
+                {picking ? (
+                  <>
+                    <Spinner className="w-4 h-4" color="#000" />
+                    Picking {persona.name}…
+                  </>
+                ) : (
+                  `Pick ${persona.name} — iterate in chat`
+                )}
+              </button>
+              {pickError && (
+                <div className="mt-3 text-[12px] text-red-300 text-center">
+                  {pickError}
+                </div>
               )}
-            </button>
+            </>
           )}
         </div>
       </div>

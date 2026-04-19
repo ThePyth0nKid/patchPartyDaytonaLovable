@@ -97,7 +97,13 @@ async function run(): Promise<{
     take: 50,
   })
   for (const { id } of toPause) {
-    await pauseParty(id)
+    // Wrap per-row: one Daytona flake must not short-circuit the rest of the
+    // sweep. Unswallowed errors here left ~N parties forever in IDLE_WARN.
+    try {
+      await pauseParty(id)
+    } catch (error: unknown) {
+      log.warn('cron: pauseParty failed', { id, error: String(error) })
+    }
   }
 
   // PAUSED → TERMINATED
@@ -110,7 +116,11 @@ async function run(): Promise<{
     take: 50,
   })
   for (const { id } of toTerm) {
-    await terminateParty(id)
+    try {
+      await terminateParty(id)
+    } catch (error: unknown) {
+      log.warn('cron: terminateParty failed', { id, error: String(error) })
+    }
   }
 
   return {
