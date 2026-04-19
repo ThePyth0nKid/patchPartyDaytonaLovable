@@ -1,0 +1,524 @@
+// Chat-iterate runner.
+//
+// After a user picks a winning persona, this module drives the follow-up
+// conversation inside the same live sandbox:
+//   - Load chat history from the DB.
+//   - Build Anthropic messages (system = persona + chat-mode append, plus
+//     previous turns and the new user message).
+//   - Run a tool-use loop: Claude emits tool_use → we execute in the sandbox
+//     → feed the tool_result back → repeat until Claude produces a final
+//     assistant message (or we hit the tool-loop cap).
+//   - Commit applied edits to the sandbox branch and push.
+//   - Persist the turn (cost, tokens, latency) in ChatTurn.
+//
+// The returned iterator emits Server-Sent Events describing the turn.
+
+import Anthropic from '@anthropic-ai/sdk'
+import { Daytona, type Sandbox } from '@daytonaio/sdk'
+import { getPersona, PersonaId } from './personas'
+import { prisma } from './prisma'
+import { loadKey } from './byok'
+import { emitEvent, EventType } from './events'
+import { markActivity } from './sandbox-lifecycle'
+import { log } from './log'
+import { computeCost, RATES } from './costing'
+
+const daytona = new Daytona()
+
+export const MAX_TURNS_PER_PARTY = 20
+export const TOOL_LOOP_CAP = 8
+export const TURN_TIMEOUT_MS = 120_000
+export const MAX_EDIT_LINES = 500
+
+const COMMAND_WHITELIST: RegExp[] = [
+  /^npm (install|ci)(\s.*)?$/,
+  /^npm run (build|test|lint|typecheck|check)(\s.*)?$/,
+  /^(pnpm|yarn|bun) (install|run [\w-]+)(\s.*)?$/,
+  /^git (diff|log|status|show)(\s.*)?$/,
+  /^ls(\s.*)?$/,
+  /^cat \S+$/,
+  /^head -n ?\d+ \S+$/,
+  /^tail -n ?\d+ \S+$/,
+]
+
+const INJECTION_CHARS = /[;&|`$]|\$\(/
+
+export function isWhitelisted(cmd: string): boolean {
+  const trimmed = cmd.trim()
+  if (INJECTION_CHARS.test(trimmed)) return false
+  return COMMAND_WHITELIST.some((re) => re.test(trimmed))
+}
+
+const CHAT_SYSTEM_APPEND = `
+
+── Chat-Iterate Mode ──
+You previously delivered the implementation in this sandbox. The user is now refining interactively.
+Keep your original persona's voice but:
+- Make the minimum change that satisfies the request
+- Read files before editing when unsure of state
+- Use apply_edit(mode=patch) for targeted changes, mode=replace only when rewriting <50 lines
+- After non-trivial changes consider running \`npm run build\` or \`npm run test\`
+- Call request_permission before destructive ops (rm, force-push, schema changes)
+
+Respond conversationally in 1–3 short paragraphs, then execute tools.`
+
+const chatTools: Anthropic.Tool[] = [
+  {
+    name: 'apply_edit',
+    description:
+      'Apply an edit to a file in the sandbox. mode=replace sends the full file content; mode=patch sends a unified diff (preferred for multi-hunk edits).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        mode: { type: 'string', enum: ['replace', 'patch'] },
+        content: { type: 'string' },
+      },
+      required: ['path', 'mode', 'content'],
+    },
+  },
+  {
+    name: 'read_file',
+    description: 'Read a file from the sandbox.',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'run_command',
+    description:
+      'Run a whitelisted shell command in the sandbox. Whitelist: npm install/ci, npm run <build|test|lint|typecheck|check>, git diff/log/status/show, ls, cat, head, tail.',
+    input_schema: {
+      type: 'object',
+      properties: { command: { type: 'string' } },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'request_permission',
+    description:
+      'Ask the user for permission to run a non-whitelisted command. The UI surfaces an approval card; the user accepts or denies before any execution.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string' },
+        rationale: { type: 'string' },
+      },
+      required: ['command', 'rationale'],
+    },
+  },
+]
+
+export type ChatSseEvent =
+  | { event: 'turn_started'; data: { turnIndex: number } }
+  | { event: 'text_delta'; data: { content: string } }
+  | {
+      event: 'tool_call'
+      data: { tool: string; input: unknown; toolUseId: string }
+    }
+  | {
+      event: 'tool_result'
+      data: { toolUseId: string; output: string; isError?: boolean }
+    }
+  | { event: 'commit'; data: { sha: string; message: string } }
+  | {
+      event: 'turn_done'
+      data: { turnIndex: number; costUsd: number; latencyMs: number }
+    }
+  | { event: 'turn_failed'; data: { error: string } }
+
+export interface ChatRunContext {
+  partyId: string
+  userId: string
+  userToken: string
+}
+
+async function getAnthropicForUser(userId: string): Promise<Anthropic> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { preferredKeyMode: true },
+  })
+  if (user?.preferredKeyMode === 'BYOK') {
+    const key = await loadKey(userId)
+    if (key) return new Anthropic({ apiKey: key })
+  }
+  return new Anthropic()
+}
+
+async function executeTool(
+  sandbox: Sandbox,
+  repoDir: string,
+  name: string,
+  input: unknown,
+): Promise<{ output: string; isError: boolean; applied?: string }> {
+  if (name === 'read_file') {
+    const { path } = input as { path: string }
+    try {
+      const buf = await sandbox.fs.downloadFile(`${repoDir}/${path}`)
+      const text = buf.toString('utf-8')
+      return { output: text.slice(0, 20_000), isError: false }
+    } catch (error: unknown) {
+      return { output: `read_file failed: ${String(error)}`, isError: true }
+    }
+  }
+
+  if (name === 'apply_edit') {
+    const { path, mode, content } = input as {
+      path: string
+      mode: 'replace' | 'patch'
+      content: string
+    }
+    const lineCount = content.split('\n').length
+    if (lineCount > MAX_EDIT_LINES) {
+      return {
+        output: `apply_edit refused: ${lineCount} lines exceeds MAX_EDIT_LINES (${MAX_EDIT_LINES}). Split into smaller edits.`,
+        isError: true,
+      }
+    }
+    try {
+      if (mode === 'replace') {
+        await sandbox.fs.uploadFile(
+          Buffer.from(content, 'utf-8'),
+          `${repoDir}/${path}`,
+        )
+        return { output: `Wrote ${path} (${lineCount} lines).`, isError: false, applied: path }
+      }
+      // mode=patch — write patch to tmp, git apply --reject, report rejects
+      const patchPath = `${repoDir}/.patchparty-chat.patch`
+      await sandbox.fs.uploadFile(Buffer.from(content, 'utf-8'), patchPath)
+      const applyResult = await sandbox.process.executeCommand(
+        `cd ${repoDir} && git apply --reject --whitespace=fix .patchparty-chat.patch && rm .patchparty-chat.patch`,
+      )
+      if (applyResult.exitCode !== 0) {
+        return {
+          output: `git apply failed (exit ${applyResult.exitCode}):\n${applyResult.result?.slice(0, 4000) ?? ''}`,
+          isError: true,
+        }
+      }
+      return { output: `Patch applied to ${path}.`, isError: false, applied: path }
+    } catch (error: unknown) {
+      return { output: `apply_edit failed: ${String(error)}`, isError: true }
+    }
+  }
+
+  if (name === 'run_command') {
+    const { command } = input as { command: string }
+    if (!isWhitelisted(command)) {
+      return {
+        output: `Command not whitelisted. Call request_permission first: ${command}`,
+        isError: true,
+      }
+    }
+    try {
+      const exec = await sandbox.process.executeCommand(
+        `cd ${repoDir} && ${command}`,
+      )
+      const output = (exec.result ?? '').slice(0, 8000)
+      return {
+        output: `exit=${exec.exitCode}\n${output}`,
+        isError: (exec.exitCode ?? 0) !== 0,
+      }
+    } catch (error: unknown) {
+      return { output: `run_command threw: ${String(error)}`, isError: true }
+    }
+  }
+
+  if (name === 'request_permission') {
+    // v2.0: auto-deny non-whitelisted commands. Approval UI ships later.
+    // Opus sees the denial and must pivot.
+    const { command } = input as { command: string; rationale: string }
+    return {
+      output: `Permission denied for "${command}". Non-whitelisted commands require user approval (UI not yet available in v2.0). Use only whitelisted commands.`,
+      isError: false,
+    }
+  }
+
+  return { output: `Unknown tool: ${name}`, isError: true }
+}
+
+interface TurnResult {
+  assistantText: string
+  commitSha?: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreateTokens: number
+  costUsd: number
+  latencyMs: number
+  toolCalls: Array<{ name: string; input: unknown }>
+  filesApplied: string[]
+}
+
+async function buildMessageHistory(
+  partyId: string,
+): Promise<Anthropic.MessageParam[]> {
+  const turns = await prisma.chatTurn.findMany({
+    where: { partyId, status: 'applied' },
+    orderBy: { turnIndex: 'asc' },
+    take: 30,
+  })
+  const history: Anthropic.MessageParam[] = []
+  for (const t of turns) {
+    history.push({ role: 'user', content: t.userMessage })
+    if (t.assistantResponse) {
+      history.push({ role: 'assistant', content: t.assistantResponse })
+    }
+  }
+  return history
+}
+
+async function commitTurn(
+  sandbox: Sandbox,
+  repoDir: string,
+  userToken: string,
+  party: { repoOwner: string; repoName: string },
+  branch: string,
+  message: string,
+): Promise<string | undefined> {
+  try {
+    const escMessage = message.replace(/"/g, '\\"').slice(0, 200)
+    const exec = await sandbox.process.executeCommand(
+      `cd ${repoDir} && git add -A && git -c user.email=chat@patchparty.dev -c user.name="PatchParty Chat" commit -m "chat: ${escMessage}" || echo 'nothing-to-commit'`,
+    )
+    if ((exec.result ?? '').includes('nothing-to-commit')) return undefined
+
+    const remote = `https://x-access-token:${userToken}@github.com/${party.repoOwner}/${party.repoName}.git`
+    await sandbox.process.executeCommand(
+      `cd ${repoDir} && git push "${remote}" HEAD:${branch}`,
+    )
+    const sha = await sandbox.process.executeCommand(
+      `cd ${repoDir} && git rev-parse HEAD`,
+    )
+    return sha.result?.trim()
+  } catch (error: unknown) {
+    log.error('chat.commitTurn failed', { error: String(error) })
+    return undefined
+  }
+}
+
+export async function* runChatTurn(
+  ctx: ChatRunContext,
+  userMessage: string,
+): AsyncGenerator<ChatSseEvent, TurnResult | null, void> {
+  const start = Date.now()
+
+  const party = await prisma.party.findUnique({
+    where: { id: ctx.partyId },
+    include: { agents: true },
+  })
+  if (!party || !party.chatSessionAgentId) {
+    yield { event: 'turn_failed', data: { error: 'no chat session' } }
+    return null
+  }
+  if (party.userId !== ctx.userId) {
+    yield { event: 'turn_failed', data: { error: 'forbidden' } }
+    return null
+  }
+
+  const agent = party.agents.find((a) => a.id === party.chatSessionAgentId)
+  if (!agent?.sandboxId || !agent.branchName) {
+    yield { event: 'turn_failed', data: { error: 'sandbox missing' } }
+    return null
+  }
+
+  const existingTurns = await prisma.chatTurn.count({
+    where: { partyId: ctx.partyId },
+  })
+  if (existingTurns >= MAX_TURNS_PER_PARTY) {
+    yield {
+      event: 'turn_failed',
+      data: { error: 'Chat session limit reached. Ship the PR to finalize.' },
+    }
+    return null
+  }
+
+  const turnIndex = existingTurns
+  yield { event: 'turn_started', data: { turnIndex } }
+
+  const persona = getPersona(agent.personaId as PersonaId)
+  const systemPrompt = persona.systemPrompt + CHAT_SYSTEM_APPEND
+
+  const history = await buildMessageHistory(ctx.partyId)
+  const messages: Anthropic.MessageParam[] = [
+    ...history,
+    { role: 'user', content: userMessage },
+  ]
+
+  void emitEvent(EventType.CHAT_TURN_SENT, {
+    partyId: ctx.partyId,
+    agentId: agent.id,
+    turnIndex,
+  })
+  await markActivity(ctx.partyId)
+
+  const anthropic = await getAnthropicForUser(ctx.userId)
+  const sandbox = await daytona.get(agent.sandboxId)
+  const repoDir = '/home/daytona/repo'
+
+  let totalInput = 0
+  let totalOutput = 0
+  let cacheRead = 0
+  let cacheCreate = 0
+  let assistantText = ''
+  const toolCalls: Array<{ name: string; input: unknown }> = []
+  const filesApplied: string[] = []
+  let errorMessage: string | undefined
+
+  try {
+    for (let loop = 0; loop < TOOL_LOOP_CAP; loop++) {
+      if (Date.now() - start > TURN_TIMEOUT_MS) {
+        errorMessage = 'turn timed out'
+        break
+      }
+
+      const response = await anthropic.messages.create({
+        model: 'claude-opus-4-7',
+        max_tokens: 4096,
+        system: [
+          {
+            type: 'text',
+            text: systemPrompt,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        tools: chatTools,
+        messages,
+      })
+
+      totalInput += response.usage.input_tokens
+      totalOutput += response.usage.output_tokens
+      cacheRead += response.usage.cache_read_input_tokens ?? 0
+      cacheCreate += response.usage.cache_creation_input_tokens ?? 0
+
+      const toolUses: Anthropic.ToolUseBlock[] = []
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          assistantText += block.text
+          yield { event: 'text_delta', data: { content: block.text } }
+        } else if (block.type === 'tool_use') {
+          toolUses.push(block)
+          toolCalls.push({ name: block.name, input: block.input })
+          yield {
+            event: 'tool_call',
+            data: { tool: block.name, input: block.input, toolUseId: block.id },
+          }
+        }
+      }
+
+      if (response.stop_reason !== 'tool_use' || toolUses.length === 0) {
+        break
+      }
+
+      messages.push({ role: 'assistant', content: response.content })
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = []
+      for (const tu of toolUses) {
+        const result = await executeTool(sandbox, repoDir, tu.name, tu.input)
+        if (result.applied) filesApplied.push(result.applied)
+        yield {
+          event: 'tool_result',
+          data: {
+            toolUseId: tu.id,
+            output: result.output,
+            isError: result.isError,
+          },
+        }
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: tu.id,
+          content: result.output,
+          is_error: result.isError,
+        })
+      }
+      messages.push({ role: 'user', content: toolResults })
+    }
+  } catch (error: unknown) {
+    errorMessage = error instanceof Error ? error.message : String(error)
+  }
+
+  const latencyMs = Date.now() - start
+  const costUsd = computeCost({
+    model: 'opus',
+    inputTokens: totalInput,
+    outputTokens: totalOutput,
+    cacheReadTokens: cacheRead,
+    cacheCreateTokens: cacheCreate,
+  })
+
+  let commitSha: string | undefined
+  if (filesApplied.length > 0 && !errorMessage) {
+    commitSha = await commitTurn(
+      sandbox,
+      repoDir,
+      ctx.userToken,
+      party,
+      agent.branchName,
+      userMessage.slice(0, 80),
+    )
+    if (commitSha) {
+      yield {
+        event: 'commit',
+        data: { sha: commitSha, message: userMessage.slice(0, 80) },
+      }
+    }
+  }
+
+  const status = errorMessage ? 'failed' : 'applied'
+  try {
+    await prisma.chatTurn.create({
+      data: {
+        partyId: ctx.partyId,
+        turnIndex,
+        userMessage,
+        assistantResponse: assistantText || null,
+        toolCalls: toolCalls as unknown as object,
+        diffApplied: filesApplied,
+        inputTokens: totalInput,
+        outputTokens: totalOutput,
+        cacheReadTokens: cacheRead,
+        cacheCreateTokens: cacheCreate,
+        latencyMs,
+        costUsd: costUsd.toFixed(4),
+        status,
+        error: errorMessage ?? null,
+      },
+    })
+  } catch (error: unknown) {
+    log.error('chat.persist failed', { error: String(error) })
+  }
+
+  void emitEvent(
+    errorMessage ? EventType.CHAT_TURN_FAILED : EventType.CHAT_TURN_APPLIED,
+    {
+      partyId: ctx.partyId,
+      agentId: agent.id,
+      turnIndex,
+      costUsd,
+      filesApplied,
+      ...(errorMessage ? { error: errorMessage } : {}),
+    },
+  )
+
+  if (errorMessage) {
+    yield { event: 'turn_failed', data: { error: errorMessage } }
+    return null
+  }
+  yield { event: 'turn_done', data: { turnIndex, costUsd, latencyMs } }
+
+  return {
+    assistantText,
+    commitSha,
+    inputTokens: totalInput,
+    outputTokens: totalOutput,
+    cacheReadTokens: cacheRead,
+    cacheCreateTokens: cacheCreate,
+    costUsd,
+    latencyMs,
+    toolCalls,
+    filesApplied,
+  }
+}
+
+export { RATES }
