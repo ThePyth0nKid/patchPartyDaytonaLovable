@@ -84,21 +84,23 @@ export async function runAgent(
 
     // 4. Generate code with Claude using persona prompt
     setStatus('generating', `${persona.name} is thinking...`)
-    const userPrompt = buildUserPrompt(party, contextFiles)
+    // Opus 4.7 rejects the assistant-message prefill trick with
+    // invalid_request_error ("model does not support assistant message
+    // prefill"). Instead we steer via the user prompt — tells Claude the
+    // exact opening token — and rely on parseClaudeResponse's regex
+    // extractor to handle any stray prose that slips through.
+    const opener = persona.id === 'innovator' ? '{' : '['
+    const closer = persona.id === 'innovator' ? '}' : ']'
+    const userPrompt = `${buildUserPrompt(party, contextFiles)}
 
-    // Prefill the assistant turn with the opening JSON token so Claude cannot
-    // emit chain-of-thought prose before the payload. Innovator returns an
-    // object, everyone else returns an array.
-    const prefill = persona.id === 'innovator' ? '{' : '['
+Begin your response immediately with \`${opener}\` and end with \`${closer}\`. No prose, no markdown fences, no commentary — only raw JSON.`
+
     const startGen = Date.now()
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-7',
       max_tokens: 16000,
       system: persona.systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt },
-        { role: 'assistant', content: prefill },
-      ],
+      messages: [{ role: 'user', content: userPrompt }],
     })
 
     const textContent = response.content.find((c) => c.type === 'text')
@@ -112,9 +114,7 @@ export async function runAgent(
       )
     }
 
-    // Claude's API omits the prefill from the response — prepend it so the
-    // parser sees the full JSON document.
-    const fullText = prefill + textContent.text
+    const fullText = textContent.text
 
     // 5. Apply code changes to sandbox filesystem
     setStatus('writing', 'Applying changes...')
