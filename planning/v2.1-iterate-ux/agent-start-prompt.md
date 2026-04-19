@@ -1,113 +1,98 @@
-# Agent Start Prompt — PatchParty v2.1 Iterate-UX Redesign
+# Agent Start Prompt — PatchParty v2.1 Iterate-UX (Resume Session)
 
-> Copy everything below the `---` into your next agent session after context-clear. It is fully self-contained. Do not paraphrase or summarize it — paste verbatim.
+> Copy everything below the `---` into your next agent session after context-clear. It is fully self-contained. Do not paraphrase or summarize — paste verbatim.
 
 ---
 
-You are taking over the PatchParty codebase at `C:\Users\nelso\Desktop\patchPartyDaytonaLovable` for a single focused scope: the v2.1 iterate-flow UX redesign. The previous session (2026-04-19) ran an adversarial swarm review (architect + planner + code-reviewer + security-reviewer) and produced a complete plan in `planning/v2.1-iterate-ux/`. Your job is to execute that plan end-to-end.
+You are resuming the PatchParty v2.1 Iterate-UX redesign at `C:\Users\nelso\Desktop\patchPartyDaytonaLovable` on branch `main`. Sprint 1 (data-model foundation) and Sprint 2 (security hardening) have shipped. Sprint 3 has started — T3.1 (IteratePage skeleton + viewport toggle) landed. You are picking up at **T3.2 (TurnCard + DiffDrawer)**.
 
-## Project context
+## What shipped so far (commits in order)
 
-PatchParty races 3 AI personas against a single GitHub issue, each inside its own Daytona sandbox. User picks a winner. After pick, losers should terminate and the winner's sandbox stays warm for chat-iterate (Opus tool-use loop). Lifecycle: ACTIVE → IDLE_WARN → PAUSED → TERMINATED via cron. BYOK is first-class. Telemetry writes PartyEvent / AgentMetric / ChatTurn / PickDecision to Postgres.
+| Commit | Task(s) | What landed |
+|---|---|---|
+| `150e486` | T1.1 – T1.5 | Sprint 1: schema (ChatTurn.diffStats/commitSha/revertedByTurnIndex, Agent.sandboxTerminatedAt), runChatTurn concurrency guard (pending-row + P2002 retry — see D1), per-turn diffStats capture + commitSha, GIT_ASKPASS for git push, terminateLosers parallelization + cron reconciliation (see D2/D3) |
+| `84a24cc` | Sprint 1 follow-up | Reviewer-flagged fixes: 2 CRITICAL + 3 HIGH |
+| `7d2245d` | T2.1, T2.3, T2.5 | Sprint 2: iframe sandbox attr + frame-ancestors CSP, safe-path secrets deny-list (18 unit tests), custom-header CSRF (`x-patchparty-request: 1`) |
+| `b209a43` | T2.6, T2.7, T2.8 | Security-reviewer swarm fixes (see D9): auth + ownership on `/api/sandbox/cleanup` (CRITICAL), preview-proxy SSRF allowlist (HIGH, D6), Windows-backslash path tests (HIGH), auth-before-CSRF reorder on all 4 write routes (MEDIUM) |
+| `b05fd0c` | T2.2 | Sliding-window rate limit on `/chat` (4 req/60s per user) via `@upstash/ratelimit`. Gracefully no-ops when Upstash creds absent — see D5 |
+| `a6d3186` | T3.1, T3.6 | IteratePage extraction: PreviewPane / ViewportToggle / SandboxBanner / IteratePage; grid layout `lg:grid-cols-[minmax(0,1fr)_480px]`; localStorage persistence of viewport under `patchparty:viewport`; mobile device frame without iframe remount. ChatPane kept as the TurnColumn body for now (see D7). ViewportToggle bundled into T3.1 (D8) |
 
-Stack: Next.js 15 App Router, React 19 RC, TypeScript, Prisma 6 + Postgres (Railway), `@daytonaio/sdk`, `@anthropic-ai/sdk` (Opus 4.7 — note: does NOT support assistant prefill), Auth.js v5-beta, `pg` LISTEN/NOTIFY for cross-container SSE fanout.
+All decisions D1–D9 are recorded in `planning/v2.1-iterate-ux/decisions.md`. Do not re-litigate them.
 
-Live production: https://patchparty.dev. Won the AI Builders Berlin Hackathon 2026-04-17 (Daytona × Lovable track).
+## Remaining tasks — priority order
 
-## What triggered this work
+### Sprint 3 (UI build)
 
-User tested the post-pick chat-iterate flow after v2.0 shipped and found it confusing:
+- **T2.4 + T3.2 (bundle these)** — `TurnCard` + `DiffDrawer` + `GET /api/party/[id]/turns/[idx]/diff` endpoint. Use `prism-react-renderer` (element-based — **no** `dangerouslySetInnerHTML`, no `dompurify` path). Closes **S2** in `05-security-checklist.md`. Add a fixture test: diff containing `</pre><script>alert(1)</script><pre>` must render as literal text.
+- **T3.3** — `InputDock` + 5 hard-coded chip templates (Shorter / Add tests / Run build / Mobile-first / Undo last). **No merge fields, no `{{...}}` interpolation.** Closes **S7**. Chips are a file-level `const` array of `{ id, label, prompt }`.
+- **T3.4** — `POST /api/party/[id]/chat/undo` endpoint + UI. Soft-delete only: mark the target turn `status='undone'`, set `revertedByTurnIndex` on the new reverting turn, run `git revert` inside the sandbox, **never** force-push. Extend the existing CSRF guard on this route. Closes **S10** (audit-trail preserved).
+- **T3.5** — `ShipSheet` + `GET /api/party/[id]/ship/preview` endpoint. User-editable PR body + title. Server strips `/<!--[\s\S]*?-->/g` from body before sending to GitHub and caps at 2000 chars. Closes **S5**.
 
-> "Jetzt sehe ich ganz, ganz viel Text, sehe aber gar nicht, was sich geändert hat. Kann es gar nicht mehr validieren."
+### Sprint 4 (polish + smoke)
 
-Envisioned experience: Cursor/Lovable-style "vibe-code" — see diffs per turn, toggle mobile/desktop preview, use control chips, explicit Ship PR step. A review swarm mapped the full design.
+- **T4.1** — Failed turns don't count against the 20-turn cap. `buildMessageHistory` already filters on `status='applied'` (see S10 note); verify the counter in `runChatTurn` uses the same filter.
+- **T4.2** — Cumulative cost meter in `IterateHeader`. Sum `ChatTurn.totalCostUsd` for applied turns; display under persona name.
+- **T4.3** — `ShipSheet` localStorage draft persistence. Key: `patchparty:ship-draft:${partyId}`.
+- **T4.4** — End-to-end manual smoke. Run `TESTING.md` first (foundation smoke), then the 13-step script in `03-tasks.md §T4.4`. Write `planning/v2.1-iterate-ux/report.md`.
+
+Run `TaskList` on session start to see task state (they're already in the task store).
+
+## Read order before writing code
+
+1. `planning/v2.1-iterate-ux/README.md` — ship criteria
+2. `planning/v2.1-iterate-ux/00-locked-decisions.md` — non-negotiables (keep open)
+3. `planning/v2.1-iterate-ux/01-ux-spec.md` — TurnCard + DiffDrawer + InputDock + ShipSheet specs
+4. `planning/v2.1-iterate-ux/03-tasks.md` — T3.2 onward: exact acceptance criteria
+5. `planning/v2.1-iterate-ux/05-security-checklist.md` — S2/S5/S7/S10 — these are what the remaining work closes out
+6. `planning/v2.1-iterate-ux/decisions.md` — D1–D9, especially D4 (csrf-constants), D5 (Upstash fallback), D6 (SSRF allowlist), D7 (T3.1 kept ChatPane)
+7. `planning/v2.1-iterate-ux/TESTING.md` — what's verifiable today; extend as new tasks land
+
+## Grounding step — read these files before editing
+
+- `src/app/party/[id]/iterate-page.tsx` — the current post-pick orchestrator; T3.2 replaces the `<ChatPane>` child with `<TurnColumn>` which contains `<TurnCard[]>` + `<InputDock>`
+- `src/app/party/[id]/chat-pane.tsx` — to understand current turn rendering + SSE subscription that TurnCard must inherit from
+- `src/lib/chat.ts` — `runChatTurn` + `buildMessageHistory`; where diffStats is captured; where T4.1 must filter
+- `src/app/api/party/[id]/chat/route.ts` — POST pattern (auth → CSRF → rate-limit → stream); T3.4 undo follows the same skeleton
+- `src/app/api/party/[id]/pr/route.ts` — current canned PR body; T3.5 adds user-editable path
+- `src/lib/client-fetch.ts` + `src/lib/csrf-constants.ts` — client-side `csrfFetch` + constants; all new write routes go through this
+- `src/lib/safe-path.ts` + `tests/safe-path.test.ts` — already hardened; T3.4's `git revert` must still go through this if it reads files
+
+## Env vars — required for production, optional for local dev
+
+Documented in `.env.example`:
+
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` — **required in prod** for S3 rate limit. Without them, limiter is a no-op (D5). `.env.example` calls this out explicitly.
+- `DAYTONA_PREVIEW_HOST_SUFFIXES` — optional, defaults to `.daytona.work,.daytona.app,.daytona.io` (D6). Self-hosted Daytona users override.
+- `BYOK_ENCRYPTION_KEY` — 32-byte base64; required since v2.0.
 
 ## Absolute scope
 
 **YES:**
-- Implement every task in `planning/v2.1-iterate-ux/03-tasks.md`, priority-ordered (Sprint 1 → 4).
-- Fix every red-team finding listed in `planning/v2.1-iterate-ux/04-red-team-findings.md` (or log deferral in `deferred.md`).
-- Address every HIGH + MEDIUM item in `planning/v2.1-iterate-ux/05-security-checklist.md`.
-- Write unit tests alongside fixes (no TDD-later).
+- Finish Sprint 3 (T2.4+T3.2, T3.3, T3.4, T3.5) and Sprint 4 (T4.1–T4.4).
+- Close S2, S5, S7 in `05-security-checklist.md` with the corresponding task commits.
+- Write unit tests alongside fixes — no TDD-later.
+- After each UI commit, run the `code-reviewer` agent. After any security-sensitive change, `security-reviewer`.
 
 **NO:**
-- Do not re-litigate the locked decisions in `planning/v2.1-iterate-ux/00-locked-decisions.md`. User has already chosen.
-- Do not add features outside this scope (no Stripe, no admin dashboard, no divergence benchmark, no v2.2 patterns work).
-- Do not run `prisma migrate deploy` against Railway without explicit user confirmation. Local `prisma migrate dev --create-only` is fine.
-- Do not run `railway up`, `git push --force`, or anything destructive on remote state without explicit user OK.
-- Do not re-design what's already specced. If the spec has a gap, fill it with the reasonable choice and log the decision in a short note.
-
-## Read order — before you write any code
-
-1. `planning/v2.1-iterate-ux/README.md` — overview + ship criteria
-2. `planning/v2.1-iterate-ux/00-locked-decisions.md` — non-negotiables (keep open in a tab)
-3. `planning/v2.1-iterate-ux/01-ux-spec.md` — screen layout, component tree, turn-card spec
-4. `planning/v2.1-iterate-ux/02-data-model-changes.md` — schema + SSE extensions (P0 prerequisite)
-5. `planning/v2.1-iterate-ux/03-tasks.md` — the priority-ordered work list
-6. `planning/v2.1-iterate-ux/04-red-team-findings.md` — what to verify against
-7. `planning/v2.1-iterate-ux/05-security-checklist.md` — security gates
-
-Also useful: `planning/v2.0-hardening/agent-start-prompt.md` — some tasks there may already have landed fixes that overlap with this scope (notably iframe sandbox, token-in-argv, advisory-lock direction). Verify before re-doing.
-
-## Before starting Sprint 1 — grounding step
-
-Do not trust any file-level claim in the plan docs blindly. Verify by reading the actual files:
-
-- `src/lib/chat.ts` — confirm `ChatTurn.create` call currently does NOT persist `commitSha`/`diffStats`; confirm advisory-lock is not already present
-- `prisma/schema.prisma` — confirm `ChatTurn` model shape (which fields exist, which don't)
-- `src/app/api/party/[id]/pick/route.ts` — confirm `terminateLosers` call site + fire-and-forget pattern
-- `src/lib/sandbox-lifecycle.ts` — confirm current `terminateLosers` implementation (serial or already parallel? has `sandboxTerminatedAt` been added?)
-- `src/app/api/party/[id]/chat/route.ts` — confirm no rate limit currently; confirm SSE structure
-- `src/app/party/[id]/page.tsx` — confirm current post-pick rendering (inline section) and iframe attributes (sandbox present or not?)
-- `src/lib/agent.ts` + `src/lib/chat.ts` — confirm GIT_ASKPASS refactor status (was flagged in v2.0-hardening)
-
-If a finding turns out to already be fixed by the v2.0-hardening pass, mark it done in `planning/v2.1-iterate-ux/deferred.md` with a one-line note and move on.
-
-## Sprint-level execution
-
-### Sprint 1 — Data Model Foundation
-
-Tasks T1.1 through T1.5. Must complete before any UI work. Three commits:
-
-- `feat(schema): extend ChatTurn with diffStats + commitSha`
-- `feat(chat): capture per-turn diff stats + advisory lock`
-- `fix(security): GIT_ASKPASS for git push + loser teardown hardening`
-
-After each commit: `npx tsc --noEmit`, run the unit tests, move on. No deploy.
-
-### Sprint 2 — Security Hardening
-
-Tasks T2.1 through T2.5. Two commits. Verify each against the corresponding S-item in `05-security-checklist.md` and matching R-item in `04-red-team-findings.md`.
-
-### Sprint 3 — UI Build
-
-Tasks T3.1 through T3.6. One commit per task. Use the `code-reviewer` agent after each UI commit. Smoke-test locally in browser after T3.5 (Ship PR) and T3.6 (viewport toggle).
-
-### Sprint 4 — Polish + Smoke
-
-Tasks T4.1 through T4.5. End with a manual smoke run (the 13-step script in `03-tasks.md` §T4.4). Write `planning/v2.1-iterate-ux/report.md`.
+- Do not re-litigate locked decisions (`00-locked-decisions.md`) or D1–D9 (`decisions.md`).
+- Do not ship S8 (managed-mode daily cost cap) — deferred to v2.2. Log in `deferred.md` before smoke.
+- Do not run `prisma migrate deploy`, `railway up`, `git push --force`, `git reset --hard origin/main`, or delete branches without explicit user OK.
+- Do not use `--no-verify`, `--no-gpg-sign`, or amend commits. Fix hook failures and create new commits.
+- Do not add features outside this scope (no divergence benchmark, no v2.2 patterns, no admin dashboard).
 
 ## Operational rules
 
-- Use TaskCreate/TaskUpdate to track the ~20 tasks across sprints. Set `in_progress` when starting, `completed` when the matching acceptance criterion is met (including verify step).
-- Read each file before editing. Line numbers in the plan are approximate.
-- For each fix, add or extend the matching unit test in the same commit — never defer tests.
-- Use the `code-reviewer` agent after any non-trivial commit. Use `security-reviewer` after Sprint 2 commits. Use `tdd-guide` when writing new tests. Use `build-error-resolver` if typecheck or build breaks.
-- If you hit an ambiguity the plan doesn't cover, make the judgment call and document it in a 2-line note in `planning/v2.1-iterate-ux/decisions.md`. Don't stop to ask unless a locked decision is affected.
-- Never use `prisma migrate deploy`, `railway up`, `git push --force`, `git reset --hard origin/main`, `--no-verify`, `--no-gpg-sign`, or delete branches without explicit user OK.
-- Never amend the last commit if a hook fails — fix the issue and create a new commit.
-
-## Auto-memory reminder
-
-The user has a memory system at `C:\Users\nelso\.claude\projects\C--Users-nelso-Desktop-patchPartyDaytonaLovable\memory\`. A pointer to this planning folder should be added as a project memory on first session — if it's not already there, add one: `project_v2_1_iterate_ux.md` pointing at `planning/v2.1-iterate-ux/` as the canonical source for this scope of work.
+- Branch is `main`. Commit per task, not per file. Use conventional-commit style matching the existing log (e.g., `feat(v2.1-iterate): T3.2 — TurnCard + DiffDrawer + diff endpoint`).
+- After each commit: `bun tsc --noEmit` + run the new unit tests + `code-reviewer`. If a finding lands, fix in a follow-up commit named `fix(v2.1-iterate): address T3.x reviewer findings`.
+- Before starting Sprint 4 smoke, re-run `TESTING.md` steps 1–28 to confirm no regressions.
+- If you hit an ambiguity the plan doesn't cover, make the judgment call and add a 2-line entry to `decisions.md`. Don't stop unless a locked decision is affected.
 
 ## End state
 
-- All P0 + P1 tasks from `03-tasks.md` shipped to `main` with typecheck green
-- All HIGH + MEDIUM items from `05-security-checklist.md` checked
-- All R1–R9 attack scenarios from `04-red-team-findings.md` provably blocked (or deferred with a 1-line reason in `deferred.md`)
-- Manual smoke (13 steps) passed end-to-end on local dev
-- `planning/v2.1-iterate-ux/report.md` summarizes what shipped and what deferred
-- No Railway deploy yet — user will do that explicitly after reviewing the branch
+- T2.4 + T3.2 + T3.3 + T3.4 + T3.5 landed on `main` with typecheck green
+- T4.1 – T4.4 landed, including `report.md`
+- S2, S5, S7, S10 all checked in `05-security-checklist.md`; S8 logged as deferred in `deferred.md`
+- `TESTING.md` smoke passes end-to-end locally
+- No Railway deploy — user triggers it explicitly after review
 
-Begin by reading the plan docs (files 1-7 in read order). Then ground yourself by reading the actual source files listed under "grounding step". Then start Sprint 1 T1.1.
+Begin by running `TaskList` to see the task state. Then read files 1–7 above. Then start T2.4 + T3.2 together (one commit).
