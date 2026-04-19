@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Key, Check, Loader2, Trash2, RotateCcw } from 'lucide-react'
+import { Key, CheckCircle2, Loader2, Trash2, RotateCcw, ShieldCheck } from 'lucide-react'
 import { Hairline } from '@/components/ui/hairline'
 
 interface KeyInfo {
@@ -69,7 +69,10 @@ export function ByokCard({ initial }: ByokCardProps) {
       setKeyInput('')
       setReplacing(false)
       setStatus({ kind: 'saved' })
-      setTimeout(() => setStatus({ kind: 'idle' }), 2500)
+      // Keep the success banner up for 8s — long enough that the proof is
+      // unmistakable, short enough to clear on its own. Before: 2.5s, which
+      // users reported missing entirely.
+      setTimeout(() => setStatus({ kind: 'idle' }), 8000)
     } catch (error) {
       setStatus({
         kind: 'error',
@@ -115,12 +118,27 @@ export function ByokCard({ initial }: ByokCardProps) {
       {info.hasKey && !replacing ? (
         <div className="mt-4 flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <div className="font-semibold tracking-tight font-mono text-sm">
-              sk-ant-••••{info.fingerprint?.slice(-8) ?? '••••••••'}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-semibold tracking-tight font-mono text-sm">
+                sk-ant-••••{info.fingerprint?.slice(-8) ?? '••••••••'}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-400/10 border border-emerald-400/40 text-emerald-300 text-[10px] font-mono font-semibold uppercase tracking-[0.14em]">
+                <CheckCircle2 className="w-3 h-3" /> Validated
+              </span>
             </div>
-            <div className="mt-1.5 text-[12px] font-mono text-slate-500 space-y-0.5">
-              <div>Validated {formatDate(info.validatedAt)}</div>
-              <div>Last used {formatDate(info.lastUsedAt)}</div>
+            <div className="mt-2 text-[12px] font-mono text-slate-400 space-y-0.5">
+              <div>
+                <span className="text-slate-500">Tested against Anthropic API at</span>{' '}
+                <span className="text-emerald-300">{formatDate(info.validatedAt)}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Last used</span>{' '}
+                {formatDate(info.lastUsedAt)}
+              </div>
+              <div className="flex items-center gap-1 mt-1 text-slate-500">
+                <ShieldCheck className="w-3 h-3" />
+                Encrypted at rest · AES-256-GCM
+              </div>
             </div>
           </div>
 
@@ -183,12 +201,28 @@ export function ByokCard({ initial }: ByokCardProps) {
               </button>
             ) : null}
           </div>
+          {status.kind === 'saving' ? (
+            <div className="text-[12.5px] text-slate-300 flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Testing key against Anthropic API…
+            </div>
+          ) : null}
           {status.kind === 'error' ? (
-            <div className="text-[12.5px] text-rose-300">{status.message}</div>
+            <div className="text-[12.5px] text-rose-300 flex items-start gap-1.5 p-3 rounded-[5px] bg-rose-950/40 border border-rose-900/50">
+              <span className="flex-1">{status.message}</span>
+            </div>
           ) : null}
           {status.kind === 'saved' ? (
-            <div className="text-[12.5px] text-emerald-300 flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5" /> Key saved.
+            <div className="text-[13px] text-emerald-200 flex items-start gap-2 p-3 rounded-[5px] bg-emerald-950/30 border border-emerald-500/40">
+              <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-300 shrink-0" />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-emerald-100">
+                  Key validated — Anthropic confirmed it works.
+                </div>
+                <div className="text-[11px] text-emerald-200/80 font-mono">
+                  Encrypted with AES-256-GCM · Mode set to BYOK
+                </div>
+              </div>
             </div>
           ) : null}
         </div>
