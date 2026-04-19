@@ -65,6 +65,7 @@ export function TurnColumn({
   const [turns, setTurns] = useState<TurnCardData[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [undoing, setUndoing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const logRef = useRef<HTMLDivElement | null>(null)
 
@@ -190,6 +191,55 @@ export function TurnColumn({
     }
   }, [canSend, draft, partyId])
 
+  const refreshHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/party/${partyId}/chat-history`, {
+        cache: 'no-store',
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { turns: HistoryTurn[] }
+      setTurns(data.turns.map(historyToCard))
+    } catch {
+      /* swallow — worst case user refreshes the page */
+    }
+  }, [partyId])
+
+  const runUndo = useCallback(
+    async (targetTurnIndex: number) => {
+      if (undoing) return
+      const confirmed = window.confirm(
+        'Undo the last turn? The revert becomes a new commit — your branch history is preserved.',
+      )
+      if (!confirmed) return
+      setUndoing(true)
+      setError(null)
+      try {
+        const res = await csrfFetch(`/api/party/${partyId}/chat/undo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ turnIndex: targetTurnIndex }),
+        })
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(body.error ?? `undo failed (${res.status})`)
+        }
+        await refreshHistory()
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setUndoing(false)
+      }
+    },
+    [partyId, refreshHistory, undoing],
+  )
+
+  const onUndoLatest = useCallback(() => {
+    if (latestAppliedIndex === null) return
+    void runUndo(latestAppliedIndex)
+  }, [latestAppliedIndex, runUndo])
+
   const onOpenDiff = useCallback(
     async (turnIndex: number, file: FileDiffStat) => {
       setOpenDiff({ turnIndex, file })
@@ -298,11 +348,9 @@ export function TurnColumn({
             turn={t}
             accent={personaAccent}
             isLatestApplied={t.turnIndex === latestAppliedIndex}
-            undoing={false}
+            undoing={undoing && t.turnIndex === latestAppliedIndex}
             onOpenDiff={onOpenDiff}
-            onUndo={() => {
-              /* wired up in T3.4 */
-            }}
+            onUndo={runUndo}
           />
         ))}
       </div>
@@ -329,8 +377,8 @@ export function TurnColumn({
           draft={draft}
           onDraftChange={setDraft}
           onSend={() => void sendMessage()}
-          onUndo={undefined /* wired up in T3.4 */}
-          undoDisabled={latestAppliedIndex === null}
+          onUndo={onUndoLatest}
+          undoDisabled={latestAppliedIndex === null || undoing}
           sending={sending}
           disabled={!!disabled}
           placeholder={`Ask ${personaName} to refine the branch…`}

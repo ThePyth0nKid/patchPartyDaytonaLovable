@@ -67,11 +67,12 @@ From security-reviewer swarm pass (2026-04-19). Each item has severity, concrete
 - [ ] Confirm `/api/sandbox/cleanup` (invoked via `sendBeacon` on page close) validates `sandboxIds` belong to the requesting user's parties
 - **Verify:** read the route; if ownership check absent, add it
 
-### S10. Undo as soft-delete
-- [ ] `ChatTurn.status` can take value `'undone'` (schema supports it)
-- [ ] `buildMessageHistory` filter `status: 'applied'` excludes undone turns (already the case)
-- [ ] Never hard-delete the row (audit trail preserved, cost accounting intact)
-- **Verify:** undo a turn → DB row persists with `status='undone'` + `revertedByTurnIndex` populated
+### S10. Undo as soft-delete — ✅ shipped (T3.4)
+- [x] `ChatTurn.status` takes value `'undone'`; original row is mutated in place, never deleted
+- [x] `buildMessageHistory` in `src/lib/chat.ts:407` filters `status: 'applied'` — both the undone turn and its synthetic revert turn (also status='applied' but inert for context) are excluded by design
+- [x] Revert uses `git revert --no-edit` (additive commit), never force-push — audit trail preserved on GitHub branch
+- [x] CSRF header required; advisory lock serialises undo vs. concurrent `/chat` POSTs; only the latest applied non-reverted turn can be undone (server cross-checks the client's turnIndex)
+- **Verify:** undo a turn end-to-end (smoke step in T4.4) → /api/party/[id]/chat-history returns the original with `status='undone'` + `revertedByTurnIndex` set; the synthetic revert turn lands as `status='applied'` with its own commitSha. No row is destroyed.
 
 ### S11. Viewport toggle is pure client-side
 - [ ] No server route reads `?viewport=` query param
