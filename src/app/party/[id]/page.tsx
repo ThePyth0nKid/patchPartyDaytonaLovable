@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
@@ -253,16 +253,18 @@ export default function PartyPage({
     }
   }, [id])
 
-  function openShipSheet() {
+  const openShipSheet = useCallback(() => {
     if (!partyState?.pickedPersona) return
     setShipSheetOpen(true)
-  }
+  }, [partyState?.pickedPersona])
 
-  function handleShipped(url: string) {
+  const closeShipSheet = useCallback(() => setShipSheetOpen(false), [])
+
+  const handleShipped = useCallback((url: string) => {
     setPrUrl(url)
     // Keep the sheet open on state C (shipped) so the user sees the PR
     // link. They dismiss it manually via the header X or footer Close.
-  }
+  }, [])
 
   if (!party) {
     return (
@@ -467,7 +469,10 @@ export default function PartyPage({
               )
             }
             onShipPR={openShipSheet}
-            shippingPr={false}
+            // Reviewer follow-up: header Ship button must disable while the
+            // sheet is mid-flight so double-click can't fire a second PR
+            // create. Sheet-open + no-PR-yet is the "in progress" window.
+            shippingPr={shipSheetOpen && !prUrl}
             prUrl={prUrl}
           />
         )
@@ -490,7 +495,7 @@ export default function PartyPage({
             personaName={pickedPersona.name}
             personaAccent={accent}
             prUrl={prUrl}
-            onClose={() => setShipSheetOpen(false)}
+            onClose={closeShipSheet}
             onShipped={handleShipped}
           />
         )

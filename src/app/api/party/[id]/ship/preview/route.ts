@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma'
 import {
   aggregateDiffStats,
   buildPreviewBody,
+  sanitizeShipBody,
   stripIssueNumberPrefix,
   type ShipBodyFile,
   type ShipBodyTurn,
@@ -102,7 +103,11 @@ export async function GET(
   const type: 'feat' | 'fix' = classifierType === 'bug-fix' ? 'fix' : 'feat'
 
   const title = stripIssueNumberPrefix(party.issueTitle)
-  const body = buildPreviewBody(turnInputs, files, id)
+  // Pre-strip through the same sanitiser the /pr route uses so the preview
+  // the user sees is byte-identical to what will actually ship if they hit
+  // "Ship it" without edits. Also defends against a future LLM-authored
+  // assistantResponse that happened to contain HTML-comment bytes.
+  const body = sanitizeShipBody(buildPreviewBody(turnInputs, files, id))
 
   const payload: ShipPreviewResponse = {
     title,

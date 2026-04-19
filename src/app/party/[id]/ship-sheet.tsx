@@ -15,11 +15,17 @@
 // anything; the server strips HTML comments and caps at 2000 chars before
 // sending to GitHub.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle2, ExternalLink, X, Loader2 } from 'lucide-react'
 import type { PersonaId } from '@/lib/personas'
 import { csrfFetch } from '@/lib/client-fetch'
 import { SHIP_BODY_MAX_LEN } from '@/lib/ship-body'
+
+// Selector matching focusable elements inside the modal — used by the focus
+// trap. Standard WAI-ARIA dialog pattern: keep Tab / Shift-Tab cycling
+// inside the dialog container while it's open.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 interface ShipPreview {
   title: string
@@ -59,6 +65,8 @@ export function ShipSheet({
   const [type, setType] = useState<'feat' | 'fix'>('feat')
   const [shipping, setShipping] = useState(false)
   const [shipError, setShipError] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
 
   // Load preview on first open. If the user closes and reopens, we keep the
   // in-memory draft (T4.3 will add localStorage persistence).
@@ -108,6 +116,61 @@ export function ShipSheet({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose, shipping])
 
+  // Focus trap — keep Tab / Shift-Tab cycling inside the dialog while open.
+  // Remember the element that had focus before the sheet opened so we can
+  // restore it on close (AAA accessibility pattern).
+  useEffect(() => {
+    if (!open) return
+    const node = dialogRef.current
+    if (!node) return
+    previouslyFocused.current = document.activeElement as HTMLElement | null
+
+    // Move initial focus onto the first focusable element inside the
+    // dialog — fallback to the container itself if there isn't one yet
+    // (eg. the preview is still loading).
+    const initial = node.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    if (initial) {
+      initial.focus()
+    } else {
+      node.focus()
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Tab') return
+      if (!node) return
+      const focusables = Array.from(
+        node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((el) => !el.hasAttribute('disabled'))
+      if (focusables.length === 0) {
+        e.preventDefault()
+        node.focus()
+        return
+      }
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey) {
+        if (active === first || !node.contains(active)) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else if (active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    node.addEventListener('keydown', onKeyDown)
+    return () => {
+      node.removeEventListener('keydown', onKeyDown)
+      // Restore focus to the button that opened the sheet — otherwise the
+      // user lands on <body> and loses their place.
+      previouslyFocused.current?.focus?.()
+    }
+    // Re-run when loadingPreview or the shipped state flips — each state
+    // change swaps the set of focusable elements (form fields vs PR link).
+  }, [open, loadingPreview, prUrl])
+
   const doShip = useCallback(async () => {
     if (shipping) return
     setShipping(true)
@@ -156,15 +219,17 @@ export function ShipSheet({
   return (
     <div
       className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Ship pull request"
       onClick={() => {
         if (!shipping) onClose()
       }}
     >
       <div
-        className="relative bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-t-[12px] sm:rounded-[9px] w-full sm:max-w-2xl max-h-[92vh] overflow-hidden flex flex-col"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ship-sheet-title"
+        tabIndex={-1}
+        className="relative bg-slate-900/95 backdrop-blur-xl border border-slate-800 rounded-t-[12px] sm:rounded-[9px] w-full sm:max-w-2xl max-h-[92vh] overflow-hidden flex flex-col focus:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -176,7 +241,10 @@ export function ShipSheet({
 
         <header className="px-5 sm:px-6 py-4 border-b border-slate-800/80 flex items-center justify-between">
           <div className="min-w-0">
-            <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div
+              id="ship-sheet-title"
+              className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-300"
+            >
               {isShipped ? 'PR opened' : 'Ship pull request'}
             </div>
             <div className="text-[11px] font-mono text-slate-500 truncate">
@@ -229,8 +297,13 @@ export function ShipSheet({
             </div>
           ) : (
             <>
-              <div className="space-y-1.5">
+              <div
+                role="group"
+                aria-labelledby="ship-title-label"
+                className="space-y-1.5"
+              >
                 <label
+                  id="ship-title-label"
                   htmlFor="ship-title"
                   className="block text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-400"
                 >
