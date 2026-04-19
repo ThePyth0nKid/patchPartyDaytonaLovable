@@ -6,6 +6,7 @@ import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, 
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent, PartyState, SandboxState } from '@/lib/types'
 import { IteratePage } from './iterate-page'
+import { ShipSheet } from './ship-sheet'
 import { csrfFetch } from '@/lib/client-fetch'
 
 const PERSONA_ACCENTS: Record<string, string> = {
@@ -171,8 +172,8 @@ export default function PartyPage({
   const [connected, setConnected] = useState(false)
   const [selectedPersona, setSelectedPersona] = useState<PersonaId | null>(null)
   const [partyState, setPartyState] = useState<PartyState | null>(null)
-  const [shippingPr, setShippingPr] = useState(false)
   const [prUrl, setPrUrl] = useState<string | null>(null)
+  const [shipSheetOpen, setShipSheetOpen] = useState(false)
   const partyRef = useRef<Party | null>(null)
 
   useEffect(() => {
@@ -252,23 +253,15 @@ export default function PartyPage({
     }
   }, [id])
 
-  async function handleShipPr() {
+  function openShipSheet() {
     if (!partyState?.pickedPersona) return
-    setShippingPr(true)
-    try {
-      const res = await csrfFetch(`/api/party/${id}/pr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personaId: partyState.pickedPersona }),
-      })
-      const data = await res.json()
-      if (data.prUrl) setPrUrl(data.prUrl)
-      else alert(`PR creation failed: ${data.error ?? 'unknown'}`)
-    } catch (e) {
-      alert(`Error: ${e}`)
-    } finally {
-      setShippingPr(false)
-    }
+    setShipSheetOpen(true)
+  }
+
+  function handleShipped(url: string) {
+    setPrUrl(url)
+    // Keep the sheet open on state C (shipped) so the user sees the PR
+    // link. They dismiss it manually via the header X or footer Close.
   }
 
   if (!party) {
@@ -473,9 +466,32 @@ export default function PartyPage({
                 s ? { ...s, sandboxState: 'ACTIVE' } : s,
               )
             }
-            onShipPR={handleShipPr}
-            shippingPr={shippingPr}
+            onShipPR={openShipSheet}
+            shippingPr={false}
             prUrl={prUrl}
+          />
+        )
+      })()}
+
+      {/* Ship sheet — T3.5. Rendered outside IteratePage so it can overlay
+          the full viewport without being clipped by the grid. Mounts lazily
+          (open state false = returns null from ShipSheet itself). */}
+      {partyState?.pickedPersona && (() => {
+        const pickedPersona = PERSONAS.find(
+          (p) => p.id === partyState.pickedPersona,
+        )
+        if (!pickedPersona) return null
+        const accent = PERSONA_ACCENTS[pickedPersona.color]
+        return (
+          <ShipSheet
+            open={shipSheetOpen}
+            partyId={id}
+            personaId={partyState.pickedPersona}
+            personaName={pickedPersona.name}
+            personaAccent={accent}
+            prUrl={prUrl}
+            onClose={() => setShipSheetOpen(false)}
+            onShipped={handleShipped}
           />
         )
       })()}

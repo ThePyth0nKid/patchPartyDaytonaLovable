@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { auth } from '@/auth'
 import { partyStore } from '@/lib/store'
 import {
@@ -7,9 +8,20 @@ import {
   getFallbackOctokit,
 } from '@/lib/github'
 import { getPersona, PersonaId } from '@/lib/personas'
-import { parseBody, PickPatchSchema } from '@/lib/validation'
 import { log } from '@/lib/log'
 import { requireCsrfHeader } from '@/lib/csrf'
+import { sanitizeShipBody, sanitizeShipTitle } from '@/lib/ship-body'
+
+// T3.5: accept optional user-edited title/body from the ShipSheet. Both are
+// sanitised server-side via `sanitizeShipBody` / `sanitizeShipTitle` — HTML
+// comments stripped, body capped at 2000 chars, title stripped of newlines
+// and capped at 200 chars. Closes S5.
+const ShipSchema = z.object({
+  personaId: z.string().trim().min(1).max(64),
+  title: z.string().max(400).optional(),
+  body: z.string().max(40_000).optional(),
+  type: z.enum(['feat', 'fix']).optional(),
+})
 
 export async function POST(
   req: NextRequest,
@@ -26,8 +38,16 @@ export async function POST(
   if (csrf) return csrf
 
   const { id } = await params
-  const parsed = await parseBody(req, PickPatchSchema)
-  if (!parsed.ok) return parsed.response
+  let raw: unknown
+  try {
+    raw = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid json' }, { status: 400 })
+  }
+  const parsed = ShipSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'invalid body' }, { status: 400 })
+  }
   const personaId = parsed.data.personaId as PersonaId
 
   const party = await partyStore.get(id)
@@ -54,7 +74,14 @@ export async function POST(
 
   const persona = getPersona(personaId)
 
-  const prBody = `## Implemented by PatchParty — ${persona.name}
+  // User-edited path (ShipSheet) or canned fallback (pre-T3.5 clients).
+  // Either way, the body runs through `sanitizeShipBody` so a malicious
+  // `<!-- instruction -->` cannot round-trip to GitHub.
+  const customBody = parsed.data.body
+  const customTitle = parsed.data.title
+  const typePrefix = parsed.data.type ?? 'feat'
+
+  const fallbackBody = `## Implemented by PatchParty — ${persona.name}
 
 **Philosophy:** ${persona.tagline}
 
@@ -67,11 +94,19 @@ ${agent.result.files.map((f) => `- \`${f.path}\` (${f.action})`).join('\n')}
 
 _Generated at PatchParty — choose your patch, skip the vibe._`
 
+  const finalBody = sanitizeShipBody(customBody ?? fallbackBody)
+
+  const rawTitle =
+    customTitle && customTitle.trim().length > 0
+      ? `${typePrefix}: ${customTitle}`
+      : `${party.issueTitle} [via PatchParty: ${persona.name}]`
+  const finalTitle = sanitizeShipTitle(rawTitle)
+
   const prUrl = await createPullRequest(octokit, {
     owner: party.repoOwner,
     repo: party.repoName,
-    title: `${party.issueTitle} [via PatchParty: ${persona.name}]`,
-    body: prBody,
+    title: finalTitle,
+    body: finalBody,
     head: agent.result.branchName,
   })
 
