@@ -15,6 +15,7 @@ import {
   PAUSE_AFTER_MIN,
   TERMINATE_AFTER_DAYS,
   pauseParty,
+  reconcileStuckLosers,
   terminateParty,
 } from '@/lib/sandbox-lifecycle'
 import { emitEvent, EventType } from '@/lib/events'
@@ -44,6 +45,7 @@ async function run(): Promise<{
   paused: number
   terminated: number
   unstuck: number
+  reconciledLosers: number
 }> {
   const now = new Date()
   const warnCutoff = new Date(now.getTime() - IDLE_WARN_AFTER_MIN * 60_000)
@@ -123,11 +125,22 @@ async function run(): Promise<{
     }
   }
 
+  // Reconciliation sweep for pick-teardown: retry terminations that lost
+  // their original Daytona round-trip. See sandbox-lifecycle.ts →
+  // reconcileStuckLosers for the selection criteria.
+  let reconciledLosers = 0
+  try {
+    reconciledLosers = await reconcileStuckLosers()
+  } catch (error: unknown) {
+    log.warn('cron: reconcileStuckLosers failed', { error: String(error) })
+  }
+
   return {
     warned: toWarn.length,
     paused: toPause.length,
     terminated: toTerm.length,
     unstuck: unstuck.count,
+    reconciledLosers,
   }
 }
 

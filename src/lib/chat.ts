@@ -23,6 +23,10 @@ import { emitEvent, EventType } from './events'
 import { markActivity } from './sandbox-lifecycle'
 import { log } from './log'
 import { computeCost, RATES } from './costing'
+import { parseDiffStats, type FileDiffStat } from './diff-stats'
+import { setupGitAskpass, tokenlessGitHubRemote } from './git-askpass'
+
+export { parseDiffStats, type FileDiffStat }
 
 /**
  * Resolve a model-supplied path against the sandbox repo root, refusing
@@ -147,6 +151,10 @@ export type ChatSseEvent =
     }
   | { event: 'commit'; data: { sha: string; message: string } }
   | {
+      event: 'diff_stats'
+      data: { turnIndex: number; files: FileDiffStat[] }
+    }
+  | {
       event: 'turn_done'
       data: { turnIndex: number; costUsd: number; latencyMs: number }
     }
@@ -266,9 +274,75 @@ async function executeTool(
   return { output: `Unknown tool: ${name}`, isError: true }
 }
 
+// Any pending ChatTurn row older than this is considered crashed and eligible
+// for reaping on the next reservation. TURN_TIMEOUT_MS is 120 s, so 2× gives
+// the in-flight turn headroom for slow final-commit pushes before another
+// tab's turn is allowed to claim the slot.
+const LIVE_PENDING_WINDOW_MS = TURN_TIMEOUT_MS * 2
+
+type ReservationResult =
+  | { kind: 'ok'; turnIndex: number; turnId: string }
+  | { kind: 'inflight' }
+  | { kind: 'cap_reached' }
+
+/**
+ * Reserve the next turnIndex atomically. Holds a Postgres transaction-bound
+ * advisory lock while it (a) checks for any live pending turn, (b) reaps
+ * stale pending rows, (c) checks the 20-turn cap, (d) inserts a pending
+ * row with the computed turnIndex. The advisory lock serialises concurrent
+ * reservations; the pending row then serves as the cross-request in-flight
+ * signal until the caller updates it to applied/failed.
+ */
+async function reserveTurnSlot(
+  partyId: string,
+  userMessage: string,
+): Promise<ReservationResult> {
+  return prisma.$transaction(async (tx) => {
+    const lockRow = await tx.$queryRaw<{ ok: boolean }[]>`
+      SELECT pg_try_advisory_xact_lock(hashtext(${partyId})::bigint) AS ok
+    `
+    if (!lockRow[0]?.ok) return { kind: 'inflight' as const }
+
+    const livePendingCutoff = new Date(Date.now() - LIVE_PENDING_WINDOW_MS)
+    const livePending = await tx.chatTurn.findFirst({
+      where: {
+        partyId,
+        status: 'pending',
+        createdAt: { gte: livePendingCutoff },
+      },
+      select: { id: true },
+    })
+    if (livePending) return { kind: 'inflight' as const }
+
+    await tx.chatTurn.updateMany({
+      where: { partyId, status: 'pending', createdAt: { lt: livePendingCutoff } },
+      data: { status: 'failed', error: 'stale pending reaped' },
+    })
+
+    const existingTurns = await tx.chatTurn.count({ where: { partyId } })
+    if (existingTurns >= MAX_TURNS_PER_PARTY) {
+      return { kind: 'cap_reached' as const }
+    }
+
+    const turnIndex = existingTurns
+    const row = await tx.chatTurn.create({
+      data: {
+        partyId,
+        turnIndex,
+        userMessage,
+        diffApplied: [],
+        status: 'pending',
+      },
+      select: { id: true },
+    })
+    return { kind: 'ok' as const, turnIndex, turnId: row.id }
+  })
+}
+
 interface TurnResult {
   assistantText: string
   commitSha?: string
+  diffStats: FileDiffStat[]
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
@@ -297,6 +371,11 @@ async function buildMessageHistory(
   return history
 }
 
+export interface CommitTurnResult {
+  sha: string
+  diffStats: FileDiffStat[]
+}
+
 async function commitTurn(
   sandbox: Sandbox,
   repoDir: string,
@@ -304,7 +383,7 @@ async function commitTurn(
   party: { repoOwner: string; repoName: string },
   branch: string,
   message: string,
-): Promise<string | undefined> {
+): Promise<CommitTurnResult | undefined> {
   try {
     // Base64-encode the commit message so backticks, $(), and other shell
     // metacharacters in user input cannot escape into the shell. The shell
@@ -316,17 +395,37 @@ async function commitTurn(
     )
     if ((exec.result ?? '').includes('nothing-to-commit')) return undefined
 
-    // Token in URL: short-lived ephemeral push, not stored in git config or
-    // remote URL. Daytona's process logs may capture it — acceptable for v2.0
-    // since Daytona runs in our trust boundary; revisit when isolating.
-    const remote = `https://x-access-token:${userToken}@github.com/${party.repoOwner}/${party.repoName}.git`
-    await sandbox.process.executeCommand(
-      `cd ${repoDir} && git push "${remote}" HEAD:${branch}`,
-    )
-    const sha = await sandbox.process.executeCommand(
+    // Push via GIT_ASKPASS helper so the token never lands in argv (Daytona
+    // captures command lines in its process logs). See src/lib/git-askpass.ts.
+    const askpass = await setupGitAskpass(sandbox, userToken)
+    try {
+      const remote = tokenlessGitHubRemote(party.repoOwner, party.repoName)
+      await sandbox.process.executeCommand(
+        `cd ${repoDir} && ${askpass.envPrefix} git -c credential.helper= push "${remote}" HEAD:${branch}`,
+      )
+    } finally {
+      await askpass.cleanup()
+    }
+    const shaExec = await sandbox.process.executeCommand(
       `cd ${repoDir} && git rev-parse HEAD`,
     )
-    return sha.result?.trim()
+    const sha = shaExec.result?.trim()
+    if (!sha) return undefined
+
+    // Capture per-file diff stats for this commit so the UI can render
+    // TurnCard pills without re-running git later (works even once the
+    // sandbox is paused/terminated).
+    const numstatExec = await sandbox.process.executeCommand(
+      `cd ${repoDir} && git show --numstat --format= HEAD`,
+    )
+    const namestatusExec = await sandbox.process.executeCommand(
+      `cd ${repoDir} && git show --name-status --format= HEAD`,
+    )
+    const diffStats = parseDiffStats(
+      numstatExec.result ?? '',
+      namestatusExec.result ?? '',
+    )
+    return { sha, diffStats }
   } catch (error: unknown) {
     log.error('chat.commitTurn failed', { error: String(error) })
     return undefined
@@ -358,10 +457,25 @@ export async function* runChatTurn(
     return null
   }
 
-  const existingTurns = await prisma.chatTurn.count({
-    where: { partyId: ctx.partyId },
-  })
-  if (existingTurns >= MAX_TURNS_PER_PARTY) {
+  let reservation: ReservationResult
+  try {
+    reservation = await reserveTurnSlot(ctx.partyId, userMessage)
+  } catch (error: unknown) {
+    log.error('chat.reserveTurnSlot failed', {
+      partyId: ctx.partyId,
+      error: String(error),
+    })
+    yield { event: 'turn_failed', data: { error: 'internal error' } }
+    return null
+  }
+  if (reservation.kind === 'inflight') {
+    yield {
+      event: 'turn_failed',
+      data: { error: 'Another turn is in progress. Wait a moment.' },
+    }
+    return null
+  }
+  if (reservation.kind === 'cap_reached') {
     yield {
       event: 'turn_failed',
       data: { error: 'Chat session limit reached. Ship the PR to finalize.' },
@@ -369,7 +483,7 @@ export async function* runChatTurn(
     return null
   }
 
-  const turnIndex = existingTurns
+  const { turnIndex, turnId } = reservation
   yield { event: 'turn_started', data: { turnIndex } }
 
   const persona = getPersona(agent.personaId as PersonaId)
@@ -495,8 +609,9 @@ export async function* runChatTurn(
   })
 
   let commitSha: string | undefined
+  let diffStats: FileDiffStat[] = []
   if (filesApplied.length > 0 && !errorMessage) {
-    commitSha = await commitTurn(
+    const committed = await commitTurn(
       sandbox,
       repoDir,
       ctx.userToken,
@@ -504,24 +619,30 @@ export async function* runChatTurn(
       agent.branchName,
       userMessage.slice(0, 80),
     )
-    if (commitSha) {
+    if (committed) {
+      commitSha = committed.sha
+      diffStats = committed.diffStats
       yield {
         event: 'commit',
-        data: { sha: commitSha, message: userMessage.slice(0, 80) },
+        data: { sha: committed.sha, message: userMessage.slice(0, 80) },
+      }
+      yield {
+        event: 'diff_stats',
+        data: { turnIndex, files: committed.diffStats },
       }
     }
   }
 
   const status = errorMessage ? 'failed' : 'applied'
   try {
-    await prisma.chatTurn.create({
+    await prisma.chatTurn.update({
+      where: { id: turnId },
       data: {
-        partyId: ctx.partyId,
-        turnIndex,
-        userMessage,
         assistantResponse: assistantText || null,
         toolCalls: toolCalls as unknown as object,
         diffApplied: filesApplied,
+        diffStats: diffStats as unknown as object,
+        commitSha: commitSha ?? null,
         inputTokens: totalInput,
         outputTokens: totalOutput,
         cacheReadTokens: cacheRead,
@@ -557,6 +678,7 @@ export async function* runChatTurn(
   return {
     assistantText,
     commitSha,
+    diffStats,
     inputTokens: totalInput,
     outputTokens: totalOutput,
     cacheReadTokens: cacheRead,

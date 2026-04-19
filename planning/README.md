@@ -5,6 +5,7 @@ Strategic planning artifacts for PatchParty post-MVP evolution. Each sub-folder 
 ## Active
 
 - [`v2.0-chat-iterate/`](./v2.0-chat-iterate/) — Race, Pick, Iterate. Foundation for telemetry-moat + chat-iterate + BYOK.
+- [`v2.1-iterate-ux/`](./v2.1-iterate-ux/) — **Post-pick UX redesign.** Cursor/Lovable-style vibe-code flow: per-turn diffs, viewport toggle, control chips, Ship PR. Adversarial-design pass done (architect + red + green + security). Start with `agent-start-prompt.md`.
 
 ## Concept (vision-level)
 

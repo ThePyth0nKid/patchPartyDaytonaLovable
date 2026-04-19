@@ -222,6 +222,12 @@ export async function terminateParty(partyId: string): Promise<void> {
 /**
  * Terminate every *losing* agent's sandbox for a party after a pick. Keeps
  * the winning agent alive (that one enters the state machine).
+ *
+ * Parallelized via `Promise.allSettled` so a slow/failing Daytona delete for
+ * one loser never blocks the others (serial teardown in v2 measured ~8 s per
+ * loser; two losers serial = 16 s of user-visible limbo). On success we set
+ * `Agent.sandboxTerminatedAt` — that timestamp doubles as the cron sweep's
+ * "already handled" marker so retries don't double-delete.
  */
 export async function terminateLosers(
   partyId: string,
@@ -232,27 +238,84 @@ export async function terminateLosers(
       partyId,
       id: { not: winnerAgentId },
       sandboxId: { not: null },
+      sandboxTerminatedAt: null,
     },
     select: { id: true, sandboxId: true },
   })
-  let killed = 0
-  for (const row of losers) {
-    if (!row.sandboxId) continue
-    try {
+
+  const outcomes = await Promise.allSettled(
+    losers.map(async (row) => {
+      if (!row.sandboxId) return false
       const sb = await getDaytona().get(row.sandboxId)
       await getDaytona().delete(sb)
-      killed++
-      // Same as terminateParty: only clear the pointer on actual success.
+      // Clear sandboxId + stamp termination time in a single update so the
+      // cron reconciliation sweep (which keys off `sandboxTerminatedAt IS
+      // NULL`) correctly sees the row as handled.
       await prisma.agent
-        .update({ where: { id: row.id }, data: { sandboxId: null } })
+        .update({
+          where: { id: row.id },
+          data: { sandboxId: null, sandboxTerminatedAt: new Date() },
+        })
         .catch(() => undefined)
-    } catch (error: unknown) {
+      return true
+    }),
+  )
+
+  let killed = 0
+  outcomes.forEach((outcome, idx) => {
+    if (outcome.status === 'fulfilled' && outcome.value) {
+      killed++
+    } else if (outcome.status === 'rejected') {
       log.warn('terminateLosers: delete failed, leaving sandboxId for retry', {
         partyId,
-        sandboxId: row.sandboxId,
+        sandboxId: losers[idx]?.sandboxId,
+        error: String(outcome.reason),
+      })
+    }
+  })
+  return killed
+}
+
+/**
+ * Reconciliation sweep for pick-teardown: retries termination of loser
+ * sandboxes whose initial `terminateLosers` call failed (Daytona flake,
+ * transient network error, etc). A loser is a row where the parent party
+ * has a `chatSessionAgentId`, the agent is *not* that winner, it still has
+ * `sandboxId` set, `sandboxTerminatedAt IS NULL`, and the pick happened
+ * more than `staleAfterMs` ago. Returns the number of sandboxes reclaimed.
+ */
+export async function reconcileStuckLosers(
+  staleAfterMs = 5 * 60_000,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - staleAfterMs)
+  // Prisma has no relational filter on Agent.party.pickedAt, so pull the
+  // candidate parties first, then fan out. `take: 50` bounds per-tick cost.
+  const parties = await prisma.party.findMany({
+    where: {
+      chatSessionAgentId: { not: null },
+      updatedAt: { lt: cutoff },
+      agents: {
+        some: {
+          sandboxId: { not: null },
+          sandboxTerminatedAt: null,
+        },
+      },
+    },
+    select: { id: true, chatSessionAgentId: true },
+    take: 50,
+  })
+
+  let reclaimed = 0
+  for (const p of parties) {
+    if (!p.chatSessionAgentId) continue
+    try {
+      reclaimed += await terminateLosers(p.id, p.chatSessionAgentId)
+    } catch (error: unknown) {
+      log.warn('reconcileStuckLosers: terminateLosers threw', {
+        partyId: p.id,
         error: String(error),
       })
     }
   }
-  return killed
+  return reclaimed
 }

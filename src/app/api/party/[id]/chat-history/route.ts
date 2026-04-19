@@ -30,14 +30,20 @@ export async function GET(
   }
 
   const turns = await prisma.chatTurn.findMany({
-    where: { partyId: id },
+    where: { partyId: id, status: { in: ['applied', 'failed', 'undone'] } },
     orderBy: { turnIndex: 'asc' },
     select: {
       turnIndex: true,
       userMessage: true,
       assistantResponse: true,
       diffApplied: true,
+      diffStats: true,
+      commitSha: true,
+      revertedByTurnIndex: true,
+      costUsd: true,
+      latencyMs: true,
       status: true,
+      error: true,
       createdAt: true,
     },
   })

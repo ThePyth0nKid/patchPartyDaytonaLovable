@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Persona } from './personas'
 import { AgentState, AgentStatus, Party } from './types'
 import { partyStore } from './store'
+import { setupGitAskpass, tokenlessGitHubRemote } from './git-askpass'
 
 const anthropic = new Anthropic()
 const daytona = new Daytona()
@@ -164,12 +165,23 @@ Begin your response immediately with \`${opener}\` and end with \`${closer}\`. N
       console.error(`[${persona.id}] Could not get preview URL:`, e)
     }
 
-    // 8. Branch + commit + push (so the PR endpoint can reference the branch)
+    // 8. Branch + commit + push (so the PR endpoint can reference the branch).
+    // Push via GIT_ASKPASS helper: the token never lands in argv (Daytona
+    // captures executeCommand argv in its process logs).
     const branchName = `patchparty/${persona.id}/${party.id.slice(0, 8)}`
-    const token = options.userToken
+    const safeIssueTitle = party.issueTitle.replace(/"/g, "'")
     await sandbox.process.executeCommand(
-      `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && git commit -m "feat: ${party.issueTitle.replace(/"/g, "'")} (via PatchParty: ${persona.name})" --allow-empty && git push "https://x-access-token:${token}@github.com/${party.repoOwner}/${party.repoName}.git" ${branchName}`,
+      `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && git commit -m "feat: ${safeIssueTitle} (via PatchParty: ${persona.name})" --allow-empty`,
     )
+    const askpass = await setupGitAskpass(sandbox, options.userToken)
+    try {
+      const remote = tokenlessGitHubRemote(party.repoOwner, party.repoName)
+      await sandbox.process.executeCommand(
+        `cd /home/daytona/repo && ${askpass.envPrefix} git -c credential.helper= push "${remote}" ${branchName}`,
+      )
+    } finally {
+      await askpass.cleanup()
+    }
 
     // Generate human-friendly summary using cheaper Haiku
     const summary = await generateSummary(persona, fileChanges, party.issueTitle)
