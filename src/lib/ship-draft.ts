@@ -16,6 +16,25 @@
 //   - Any localStorage failure (quota, privacy mode, disabled) silently
 //     degrades to no-op — we never want a storage error to block the
 //     user from shipping.
+//   - Length caps enforced on load (not just on save) so a tampered or
+//     migrated entry can't leak a multi-megabyte string into React
+//     state. The server has its own cap in sanitizeShipBody; this is
+//     the client-side equivalent so the UI never has to render
+//     something it can't ship.
+
+/** Matches the `<input maxLength={200}>` in ship-sheet.tsx. A
+ *  tampered localStorage entry with a longer title would otherwise
+ *  load into state and sit there unfixable by the user (the input
+ *  only enforces the cap on new keystrokes, not on programmatically
+ *  set values). */
+const TITLE_MAX_LEN = 200
+
+/** Mirrors `SHIP_BODY_MAX_LEN` in ./ship-body.ts. Duplicated because
+ *  ship-draft.ts is consumed by the node test runner (which needs
+ *  explicit .ts import extensions) AND by the Next / tsc build
+ *  (which does not permit them). Single number, kept in sync by
+ *  convention — if you change one, grep for the other. */
+const BODY_MAX_LEN = 2000
 
 export type ShipDraftType = 'feat' | 'fix'
 
@@ -47,6 +66,11 @@ export function parseShipDraft(raw: string | null): ShipDraft | null {
   if (typeof obj.title !== 'string') return null
   if (typeof obj.body !== 'string') return null
   if (obj.type !== 'feat' && obj.type !== 'fix') return null
+  // Reject oversized payloads instead of silently truncating: truncation
+  // would quietly accept data the server will reject, leaving the user
+  // confused about why they can't ship. Null forces a fresh preview.
+  if (obj.title.length > TITLE_MAX_LEN) return null
+  if (obj.body.length > BODY_MAX_LEN) return null
   return { title: obj.title, body: obj.body, type: obj.type }
 }
 
