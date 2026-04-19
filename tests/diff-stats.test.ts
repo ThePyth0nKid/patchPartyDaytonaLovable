@@ -78,3 +78,50 @@ test('skips malformed lines without throwing', () => {
 test('returns empty array for empty input', () => {
   assert.deepEqual(parseDiffStats('', ''), [])
 })
+
+test('handles rename with content changes — inline-arrow numstat form', () => {
+  // git rename with content: numstat emits `a\tb\told => new` on one column.
+  const numstat = '2\t3\tsrc/legacy/util.ts => src/lib/util.ts\n'
+  const namestatus = 'R80\tsrc/legacy/util.ts\tsrc/lib/util.ts\n'
+  const result = parseDiffStats(numstat, namestatus)
+  assert.deepEqual(result, [
+    { path: 'src/lib/util.ts', added: 2, removed: 3, status: 'R' },
+  ])
+})
+
+test('handles rename — brace form inside path (git compacts common prefix/suffix)', () => {
+  const numstat = '1\t1\tsrc/{legacy => lib}/util.ts\n'
+  const namestatus = 'R92\tsrc/legacy/util.ts\tsrc/lib/util.ts\n'
+  const result = parseDiffStats(numstat, namestatus)
+  assert.deepEqual(result, [
+    { path: 'src/lib/util.ts', added: 1, removed: 1, status: 'R' },
+  ])
+})
+
+test('handles rename — separate-column numstat form', () => {
+  // Some git versions emit `a\tb\told\tnew` instead of the arrow form.
+  const numstat = '0\t0\tsrc/legacy/util.ts\tsrc/lib/util.ts\n'
+  const namestatus = 'R100\tsrc/legacy/util.ts\tsrc/lib/util.ts\n'
+  const result = parseDiffStats(numstat, namestatus)
+  assert.deepEqual(result, [
+    { path: 'src/lib/util.ts', added: 0, removed: 0, status: 'R' },
+  ])
+})
+
+test('handles copy — C status maps to new path', () => {
+  const numstat = '5\t0\tsrc/lib/util-v2.ts\n'
+  const namestatus = 'C90\tsrc/lib/util.ts\tsrc/lib/util-v2.ts\n'
+  const result = parseDiffStats(numstat, namestatus)
+  assert.deepEqual(result, [
+    { path: 'src/lib/util-v2.ts', added: 5, removed: 0, status: 'C' },
+  ])
+})
+
+test('handles filenames containing spaces (tab-split, not whitespace-split)', () => {
+  const numstat = '3\t1\tsrc/components/My Header.tsx\n'
+  const namestatus = 'M\tsrc/components/My Header.tsx\n'
+  const result = parseDiffStats(numstat, namestatus)
+  assert.deepEqual(result, [
+    { path: 'src/components/My Header.tsx', added: 3, removed: 1, status: 'M' },
+  ])
+})

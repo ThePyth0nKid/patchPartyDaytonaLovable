@@ -23,14 +23,13 @@ interface UploadRecord {
 function makeStubSandbox() {
   const uploads: UploadRecord[] = []
   const commands: string[] = []
-  const deletes: string[] = []
   const sandbox = {
     fs: {
       uploadFile: async (buf: Buffer, path: string) => {
         uploads.push({ path, content: buf.toString('utf-8') })
       },
-      deleteFile: async (path: string) => {
-        deletes.push(path)
+      deleteFile: async (_path: string) => {
+        // unused by the current implementation (rm -rf is used instead)
       },
     },
     process: {
@@ -40,7 +39,7 @@ function makeStubSandbox() {
       },
     },
   }
-  return { sandbox, uploads, commands, deletes }
+  return { sandbox, uploads, commands }
 }
 
 const FAKE_TOKEN = 'ghs_F4K3t0k3nDoNotLeak_ABCDEFGHIJKLMNOPQRST'
@@ -79,6 +78,44 @@ test('tokenlessGitHubRemote produces a URL without any password component', () =
   assert.ok(!userinfo.includes(':'), 'userinfo unexpectedly contains ":" (password would follow)')
 })
 
+test('parent directory is created with mode 0700 before any file is uploaded', async () => {
+  const { sandbox, commands, uploads } = makeStubSandbox()
+  // Record the insertion order: mkdir command must precede any uploadFile.
+  const events: Array<{ kind: 'cmd' | 'upload'; value: string }> = []
+  const origExec = sandbox.process.executeCommand
+  const origUpload = sandbox.fs.uploadFile
+  sandbox.process.executeCommand = async (cmd: string) => {
+    events.push({ kind: 'cmd', value: cmd })
+    return origExec(cmd)
+  }
+  sandbox.fs.uploadFile = async (buf: Buffer, path: string) => {
+    events.push({ kind: 'upload', value: path })
+    return origUpload(buf, path)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await setupGitAskpass(sandbox as any, FAKE_TOKEN)
+
+  const firstEvent = events[0]
+  assert.equal(firstEvent.kind, 'cmd', 'first operation must be a command, not an upload')
+  assert.match(
+    firstEvent.value,
+    /^mkdir -m 0700 "[^"]+"$/,
+    'first command must be mkdir -m 0700 of the parent dir',
+  )
+  // Subsequent uploads must all target paths *inside* the parent.
+  const mkdirPath = firstEvent.value.match(/^mkdir -m 0700 "([^"]+)"$/)![1]
+  for (const e of events.filter((x) => x.kind === 'upload')) {
+    assert.ok(
+      e.value.startsWith(mkdirPath + '/'),
+      `upload ${e.value} is outside the 0700 parent ${mkdirPath}`,
+    )
+  }
+  // And both files landed inside the parent.
+  assert.ok(uploads.every((u) => u.path.startsWith(mkdirPath + '/')))
+  assert.ok(commands.length >= 1)
+})
+
 test('askpass script references the token file path, not the token itself', async () => {
   const { sandbox, uploads } = makeStubSandbox()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -91,42 +128,55 @@ test('askpass script references the token file path, not the token itself', asyn
   assert.match(script!.content, /cat "[^"]+"/, 'askpass script must cat a path, not echo a literal')
 })
 
-test('token file contains the token and has restrictive chmod', async () => {
+test('token file contains the token and chmod 0600 is issued on it', async () => {
   const { sandbox, uploads, commands } = makeStubSandbox()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await setupGitAskpass(sandbox as any, FAKE_TOKEN)
+  const handle = await setupGitAskpass(sandbox as any, FAKE_TOKEN)
 
-  const tokenFile = uploads.find((u) => !u.path.endsWith('.sh'))
+  const tokenFile = uploads.find((u) => u.path === handle.tokenPath)
   assert.ok(tokenFile, 'token file was not uploaded')
   assert.equal(tokenFile!.content, FAKE_TOKEN)
 
   const chmod = commands.find((c) => c.includes('chmod'))
   assert.ok(chmod, 'chmod command was never issued')
-  assert.ok(chmod!.includes('0600'), 'token file must be chmod 0600')
-  assert.ok(chmod!.includes('0700'), 'askpass script must be chmod 0700')
-  // chmod argv references the path, never the token itself.
+  assert.ok(
+    chmod!.includes(`chmod 0600 "${handle.tokenPath}"`),
+    'token file must be chmod 0600 by path',
+  )
+  assert.ok(
+    chmod!.includes(`chmod 0700 "${handle.scriptPath}"`),
+    'askpass script must be chmod 0700 by path',
+  )
+  assert.ok(
+    chmod!.includes(`chmod 0700 "${handle.dirPath}"`),
+    'parent dir must be (re-)chmod 0700',
+  )
+  // chmod argv references paths, never the token value.
   assert.ok(!chmod!.includes(FAKE_TOKEN), 'chmod argv unexpectedly contains token')
 })
 
-test('cleanup deletes both files and is idempotent against errors', async () => {
-  const { sandbox, deletes } = makeStubSandbox()
-  // Make deleteFile throw the first time it's called to verify allSettled/catch.
-  let firstDelete = true
-  sandbox.fs.deleteFile = async (path: string) => {
-    deletes.push(path)
-    if (firstDelete) {
-      firstDelete = false
-      throw new Error('simulated fs error')
+test('cleanup rm -rfs the parent dir exactly once and swallows errors', async () => {
+  const { sandbox, commands } = makeStubSandbox()
+  // Make the rm -rf throw to verify cleanup swallows (runs in finally blocks).
+  const origExec = sandbox.process.executeCommand
+  sandbox.process.executeCommand = async (cmd: string) => {
+    if (cmd.startsWith('rm -rf ')) {
+      commands.push(cmd)
+      throw new Error('simulated rm failure')
     }
+    return origExec(cmd)
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handle = await setupGitAskpass(sandbox as any, FAKE_TOKEN)
-  await handle.cleanup()
+  await handle.cleanup() // must not throw
 
-  assert.equal(deletes.length, 2, 'cleanup must attempt to delete both files')
-  assert.ok(deletes.includes(handle.scriptPath))
-  assert.ok(deletes.includes(handle.tokenPath))
+  const rms = commands.filter((c) => c.startsWith('rm -rf '))
+  assert.equal(rms.length, 1, 'cleanup must issue exactly one rm -rf')
+  assert.ok(
+    rms[0] === `rm -rf "${handle.dirPath}"`,
+    `cleanup must target the parent dir, got: ${rms[0]}`,
+  )
 })
 
 test('envPrefix exposes GIT_ASKPASS + GIT_TERMINAL_PROMPT=0 but no token', async () => {

@@ -15,6 +15,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { Daytona, type Sandbox } from '@daytonaio/sdk'
+import { Prisma } from '@prisma/client'
 import * as posixPath from 'node:path/posix'
 import { getPersona, PersonaId } from './personas'
 import { prisma } from './prisma'
@@ -275,10 +276,17 @@ async function executeTool(
 }
 
 // Any pending ChatTurn row older than this is considered crashed and eligible
-// for reaping on the next reservation. TURN_TIMEOUT_MS is 120 s, so 2× gives
-// the in-flight turn headroom for slow final-commit pushes before another
-// tab's turn is allowed to claim the slot.
-const LIVE_PENDING_WINDOW_MS = TURN_TIMEOUT_MS * 2
+// for reaping on the next reservation. TURN_TIMEOUT_MS is 120 s; we add a
+// 30 s grace for the post-Anthropic push/numstat work. Wider windows (e.g.
+// 2×) left users blocked for up to ~4 min after a crashed turn — the plan's
+// "second request must see turn_failed promptly" AC wants ~2.5 min ceiling.
+const LIVE_PENDING_WINDOW_MS = TURN_TIMEOUT_MS + 30_000
+
+// Max retries when the ChatTurn unique index (partyId, turnIndex) races us.
+// The advisory lock normally serialises reservations, but a lock-key
+// collision (vanishingly rare) or a manually-inserted row could still
+// trigger P2002; retry with turnIndex++.
+const RESERVATION_MAX_RETRIES = 3
 
 type ReservationResult =
   | { kind: 'ok'; turnIndex: number; turnId: string }
@@ -297,46 +305,80 @@ async function reserveTurnSlot(
   partyId: string,
   userMessage: string,
 ): Promise<ReservationResult> {
-  return prisma.$transaction(async (tx) => {
-    const lockRow = await tx.$queryRaw<{ ok: boolean }[]>`
-      SELECT pg_try_advisory_xact_lock(hashtext(${partyId})::bigint) AS ok
-    `
-    if (!lockRow[0]?.ok) return { kind: 'inflight' as const }
+  // P2002-retry defense in depth. The advisory lock serialises reservations
+  // within the same Postgres instance, but a lock-key collision or a
+  // concurrent external insert could still race us on ChatTurn's unique
+  // (partyId, turnIndex) index — bump the turnIndex and try again.
+  for (let attempt = 0; attempt < RESERVATION_MAX_RETRIES; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        // Two-integer pg_try_advisory_xact_lock(key1, key2) composes a 64-bit
+        // lock key, so two distinct partyIds whose hashtext collides on the
+        // first int4 still get different locks on the second. Using length
+        // as the second key is cheap and stable.
+        const lockRow = await tx.$queryRaw<{ ok: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(
+            hashtext(${partyId}),
+            ${partyId.length}
+          ) AS ok
+        `
+        if (!lockRow[0]?.ok) return { kind: 'inflight' as const }
 
-    const livePendingCutoff = new Date(Date.now() - LIVE_PENDING_WINDOW_MS)
-    const livePending = await tx.chatTurn.findFirst({
-      where: {
-        partyId,
-        status: 'pending',
-        createdAt: { gte: livePendingCutoff },
-      },
-      select: { id: true },
-    })
-    if (livePending) return { kind: 'inflight' as const }
+        const livePendingCutoff = new Date(Date.now() - LIVE_PENDING_WINDOW_MS)
+        const livePending = await tx.chatTurn.findFirst({
+          where: {
+            partyId,
+            status: 'pending',
+            createdAt: { gte: livePendingCutoff },
+          },
+          select: { id: true },
+        })
+        if (livePending) return { kind: 'inflight' as const }
 
-    await tx.chatTurn.updateMany({
-      where: { partyId, status: 'pending', createdAt: { lt: livePendingCutoff } },
-      data: { status: 'failed', error: 'stale pending reaped' },
-    })
+        await tx.chatTurn.updateMany({
+          where: {
+            partyId,
+            status: 'pending',
+            createdAt: { lt: livePendingCutoff },
+          },
+          data: { status: 'failed', error: 'stale pending reaped' },
+        })
 
-    const existingTurns = await tx.chatTurn.count({ where: { partyId } })
-    if (existingTurns >= MAX_TURNS_PER_PARTY) {
-      return { kind: 'cap_reached' as const }
+        const existingTurns = await tx.chatTurn.count({ where: { partyId } })
+        if (existingTurns >= MAX_TURNS_PER_PARTY) {
+          return { kind: 'cap_reached' as const }
+        }
+
+        // On retry, skip past already-claimed indices by offsetting from
+        // existingTurns + attempt. The Prisma client sees its own count
+        // within the tx, but a row inserted by a previous failed attempt
+        // (outside this tx) would still live in the table — hence the bump.
+        const turnIndex = existingTurns + attempt
+        const row = await tx.chatTurn.create({
+          data: {
+            partyId,
+            turnIndex,
+            userMessage,
+            diffApplied: [],
+            status: 'pending',
+          },
+          select: { id: true },
+        })
+        return { kind: 'ok' as const, turnIndex, turnId: row.id }
+      })
+    } catch (error: unknown) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        attempt < RESERVATION_MAX_RETRIES - 1
+      ) {
+        continue // retry with turnIndex bumped
+      }
+      throw error
     }
-
-    const turnIndex = existingTurns
-    const row = await tx.chatTurn.create({
-      data: {
-        partyId,
-        turnIndex,
-        userMessage,
-        diffApplied: [],
-        status: 'pending',
-      },
-      select: { id: true },
-    })
-    return { kind: 'ok' as const, turnIndex, turnId: row.id }
-  })
+  }
+  // Should be unreachable: the loop either returns inside the try or throws.
+  return { kind: 'inflight' as const }
 }
 
 interface TurnResult {

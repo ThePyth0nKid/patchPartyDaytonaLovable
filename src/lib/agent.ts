@@ -168,10 +168,20 @@ Begin your response immediately with \`${opener}\` and end with \`${closer}\`. N
     // 8. Branch + commit + push (so the PR endpoint can reference the branch).
     // Push via GIT_ASKPASS helper: the token never lands in argv (Daytona
     // captures executeCommand argv in its process logs).
+    //
+    // The commit message carries `party.issueTitle` which originates from
+    // GitHub's API — not PatchParty user input — but GitHub issue titles
+    // can still contain backticks, $(), pipes, and semicolons. Base64 the
+    // message so shell metacharacters can never escape into the commit
+    // command, matching the pattern used by commitTurn in chat.ts.
     const branchName = `patchparty/${persona.id}/${party.id.slice(0, 8)}`
-    const safeIssueTitle = party.issueTitle.replace(/"/g, "'")
+    const commitMessage = `feat: ${party.issueTitle} (via PatchParty: ${persona.name})`
+    const commitMessageB64 = Buffer.from(
+      commitMessage.slice(0, 300),
+      'utf-8',
+    ).toString('base64')
     await sandbox.process.executeCommand(
-      `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && git commit -m "feat: ${safeIssueTitle} (via PatchParty: ${persona.name})" --allow-empty`,
+      `cd /home/daytona/repo && git config user.email "bot@patchparty.dev" && git config user.name "PatchParty ${persona.name}" && git checkout -b ${branchName} && git add -A && msg=$(echo ${commitMessageB64} | base64 -d) && git commit -m "$msg" --allow-empty`,
     )
     const askpass = await setupGitAskpass(sandbox, options.userToken)
     try {
