@@ -86,7 +86,7 @@ export function IteratePage({
     sandboxState === 'RESUMING'
 
   return (
-    <section className="max-w-7xl mx-auto px-6 pb-12 space-y-4">
+    <section className="max-w-[min(1920px,calc(100vw-4rem))] mx-auto px-6 xl:px-8 2xl:px-12 pb-12 space-y-4">
       <SandboxBanner
         partyId={partyId}
         sandboxState={sandboxState}

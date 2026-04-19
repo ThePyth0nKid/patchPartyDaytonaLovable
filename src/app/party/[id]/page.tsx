@@ -209,7 +209,7 @@ export default function PartyPage({
     <main className="min-h-screen bg-slate-950 text-slate-50">
       {/* Top Nav */}
       <header className="sticky top-0 z-40 border-b border-slate-800/60 bg-slate-950/70 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-[min(1920px,calc(100vw-4rem))] mx-auto px-6 xl:px-8 2xl:px-12 h-14 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5 group">
             <ArrowLeft className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-50 transition-colors" />
             <BrandMark />
@@ -231,7 +231,7 @@ export default function PartyPage({
 
       {/* Header / Progress */}
       <section className="border-b border-slate-800/60">
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-[min(1920px,calc(100vw-4rem))] mx-auto px-6 xl:px-8 2xl:px-12 py-8">
           <div className="flex items-center gap-3 mb-3">
             <span className="text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA] drop-shadow-[0_0_8px_#A78BFA80]">
               Party in progress
@@ -271,7 +271,7 @@ export default function PartyPage({
       {/* Orchestrator banner — visible for every party that was classified */}
       {party.classification && teamPersonas.length > 0 && (
         <section className="border-b border-slate-800/60">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+          <div className="max-w-[min(1920px,calc(100vw-4rem))] mx-auto px-6 xl:px-8 2xl:px-12 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
             <div className="flex items-center gap-2 text-[12px] font-mono font-semibold uppercase tracking-[0.2em] text-[#A78BFA]">
               <Sparkles className="w-3.5 h-3.5 drop-shadow-[0_0_6px_#A78BFA]" />
               {party.classification.squadId
@@ -314,7 +314,7 @@ export default function PartyPage({
             </div>
           </div>
           {/* Classifier reason on small screens */}
-          <div className="md:hidden max-w-7xl mx-auto px-6 pb-3 text-[12px] text-slate-300 italic">
+          <div className="md:hidden max-w-[min(1920px,calc(100vw-4rem))] mx-auto px-6 xl:px-8 2xl:px-12 pb-3 text-[12px] text-slate-300 italic">
             {party.classification.reason}
           </div>
         </section>
