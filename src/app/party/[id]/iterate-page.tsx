@@ -16,7 +16,8 @@ import { useEffect, useState } from 'react'
 import type { SandboxState } from '@/lib/types'
 import type { PersonaId } from '@/lib/personas'
 import { TurnColumn } from './turn-column'
-import { PreviewPane, encodePreviewTarget } from './preview-pane'
+import { PreviewPane } from './preview-pane'
+import { encodePreviewTarget } from '@/lib/preview-target'
 import { SandboxBanner } from './sandbox-banner'
 import type { Viewport } from './viewport-toggle'
 
@@ -111,7 +112,14 @@ export function IteratePage({
           )}
         </div>
 
-        <div className="min-w-0">
+        {/*
+          The chat-column wrapper mirrors the preview-column height anchor
+          above: `lg:sticky lg:top-16 lg:h-[calc(100svh-9rem)]`. Without
+          this, TurnColumn's `h-full min-h-0` outer resolves to zero and
+          the log's internal `overflow-y-auto` never activates — the whole
+          page scrolls instead.
+        */}
+        <div className="min-w-0 lg:sticky lg:top-16 lg:h-[calc(100svh-9rem)]">
           <TurnColumn
             partyId={partyId}
             partyTitle={partyTitle}

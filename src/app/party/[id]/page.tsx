@@ -1,13 +1,15 @@
 'use client'
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
-import type { LucideIcon } from 'lucide-react'
 import { ArrowLeft, ExternalLink, X, Code2, Monitor, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react'
 import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent, PartyState, SandboxState } from '@/lib/types'
 import { IteratePage } from './iterate-page'
 import { ShipSheet } from './ship-sheet'
+import { PreviewFrame } from './preview-frame'
 import { csrfFetch } from '@/lib/client-fetch'
+import { encodePreviewTarget } from '@/lib/preview-target'
+import { Spinner } from '@/components/ui/spinner'
 
 const PERSONA_ACCENTS: Record<string, string> = {
   hackfix: '#FF6B35',
@@ -15,103 +17,6 @@ const PERSONA_ACCENTS: Record<string, string> = {
   'ux-king': '#E879F9',
   defender: '#60A5FA',
   innovator: '#A78BFA',
-}
-
-function Spinner({ className = '', color = 'currentColor' }: { className?: string; color?: string }) {
-  return (
-    <svg
-      className={`animate-spin ${className}`}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="Loading"
-    >
-      <circle cx="12" cy="12" r="9" stroke={color} strokeOpacity="0.2" strokeWidth="2" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke={color} strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function PreviewFrame({
-  src,
-  title,
-  accent,
-  icon: Icon,
-}: {
-  src: string
-  title: string
-  accent: string
-  icon: LucideIcon
-}) {
-  const [loaded, setLoaded] = useState(false)
-  const [timedOut, setTimedOut] = useState(false)
-
-  useEffect(() => {
-    setLoaded(false)
-    setTimedOut(false)
-    const t = setTimeout(() => setTimedOut(true), 20000)
-    return () => clearTimeout(t)
-  }, [src])
-
-  return (
-    <div className="relative bg-slate-950 rounded-[7px] overflow-hidden border border-slate-800 h-[600px]">
-      <iframe
-        src={src}
-        title={title}
-        onLoad={() => setLoaded(true)}
-        // allow-scripts + allow-same-origin: needed for the preview to run
-        //   its own JS and talk to its own origin (HMR, XHR to the sandbox).
-        // allow-forms: the preview is a live app; forms inside should work.
-        // allow-popups-to-escape-sandbox: an `<a target="_blank">` inside
-        //   the preview opens a normal window rather than another sandbox.
-        // allow-top-navigation is deliberately absent — a compromised
-        //   preview must not be able to navigate the parent away.
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox"
-        referrerPolicy="no-referrer"
-        className={`w-full h-full bg-white transition-opacity duration-500 ease-linear ${
-          loaded ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
-      {!loaded && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-slate-950">
-          <div
-            aria-hidden
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: `radial-gradient(ellipse 60% 40% at 50% 50%, ${accent}25, transparent 60%)`,
-            }}
-          />
-          <Icon
-            className="w-12 h-12 relative animate-pulse-slow"
-            strokeWidth={1.5}
-            style={{ color: accent, filter: `drop-shadow(0 0 20px ${accent})` }}
-          />
-          <div className="relative flex items-center gap-2 text-[12px] font-mono uppercase tracking-[0.2em] text-slate-200">
-            <Spinner className="w-3.5 h-3.5" color={accent} />
-            {timedOut ? 'Sandbox taking its time…' : 'Warming up sandbox'}
-          </div>
-          <div className="relative flex gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="h-1 w-6 rounded-full animate-pulse"
-                style={{
-                  background: accent,
-                  opacity: 0.25,
-                  animationDelay: `${i * 0.15}s`,
-                }}
-              />
-            ))}
-          </div>
-          {timedOut && (
-            <div className="relative text-[11px] font-mono text-slate-400 max-w-xs text-center px-4">
-              Preview takes ~15–30s on first load — Next.js needs to install deps inside the sandbox.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function BrandMark() {
@@ -133,11 +38,6 @@ function BrandMark() {
       </span>
     </span>
   )
-}
-
-function encodePreviewTarget(url: string, token?: string): string {
-  const json = JSON.stringify(token ? { url, token } : { url })
-  return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 function collectSandboxIds(party: Party | null): string[] {
@@ -824,6 +724,7 @@ function ComparePanel({
                     title={`${persona.name} live preview`}
                     accent={accent}
                     icon={persona.icon}
+                    className="h-[600px]"
                   />
                 ) : (
                   <div className="rounded-[7px] border border-slate-700 bg-slate-950/60 p-6 text-[13px] text-slate-300">
