@@ -86,12 +86,19 @@ export async function runAgent(
     setStatus('generating', `${persona.name} is thinking...`)
     const userPrompt = buildUserPrompt(party, contextFiles)
 
+    // Prefill the assistant turn with the opening JSON token so Claude cannot
+    // emit chain-of-thought prose before the payload. Innovator returns an
+    // object, everyone else returns an array.
+    const prefill = persona.id === 'innovator' ? '{' : '['
     const startGen = Date.now()
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-7',
-      max_tokens: 8192,
+      max_tokens: 16000,
       system: persona.systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      messages: [
+        { role: 'user', content: userPrompt },
+        { role: 'assistant', content: prefill },
+      ],
     })
 
     const textContent = response.content.find((c) => c.type === 'text')
@@ -99,9 +106,19 @@ export async function runAgent(
       throw new Error('No text response from Claude')
     }
 
+    if (response.stop_reason === 'max_tokens') {
+      throw new Error(
+        `Claude hit max_tokens (${response.usage.output_tokens}) before finishing the JSON — response is truncated`,
+      )
+    }
+
+    // Claude's API omits the prefill from the response — prepend it so the
+    // parser sees the full JSON document.
+    const fullText = prefill + textContent.text
+
     // 5. Apply code changes to sandbox filesystem
     setStatus('writing', 'Applying changes...')
-    const fileChanges = parseClaudeResponse(textContent.text, persona.id)
+    const fileChanges = parseClaudeResponse(fullText, persona.id)
 
     let linesAdded = 0
     for (const change of fileChanges) {
@@ -230,6 +247,9 @@ CRITICAL: After your changes, the dev server (npm run dev) will be started autom
  */
 function friendlyAgentError(raw: string): string {
   const s = raw.toLowerCase()
+  if (s.includes('max_tokens') || s.includes('truncated')) {
+    return 'Claude ran out of output tokens before finishing — the issue is too large for one pass. Try a narrower issue.'
+  }
   if (s.includes('invalid json') || s.includes('could not parse claude')) {
     return 'Claude returned malformed JSON. This sometimes happens on complex issues — try again.'
   }
