@@ -10,12 +10,12 @@
 // can reopen without re-hitting the endpoint.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Loader2 } from 'lucide-react'
 import type { FileDiffStat } from '@/lib/diff-stats'
 import { csrfFetch } from '@/lib/client-fetch'
 import { MAX_TURNS_PER_PARTY } from '@/lib/chat-constants'
 import { TurnCard, type TurnCardData } from './turn-card'
 import { DiffDrawer } from './diff-drawer'
+import { InputDock } from './input-dock'
 
 interface HistoryTurn {
   turnIndex: number
@@ -190,13 +190,6 @@ export function TurnColumn({
     }
   }, [canSend, draft, partyId])
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey) {
-      e.preventDefault()
-      void sendMessage()
-    }
-  }
-
   const onOpenDiff = useCallback(
     async (turnIndex: number, file: FileDiffStat) => {
       setOpenDiff({ turnIndex, file })
@@ -320,44 +313,30 @@ export function TurnColumn({
         </div>
       )}
 
-      <div className="border-t border-slate-800/80 p-3">
-        {atTurnCap ? (
-          <div className="text-[12px] text-amber-300 font-mono">
-            Chat cap of {MAX_TURNS_PER_PARTY} turns reached. Ship the PR to
-            finalise — or start a fresh party.
-          </div>
-        ) : sandboxState === 'PAUSED' || sandboxState === 'TERMINATED' ? (
-          <div className="text-[12px] text-slate-400 font-mono">
-            {sandboxState === 'PAUSED'
-              ? 'Sandbox paused. Resume it above to keep chatting.'
-              : 'Sandbox terminated. Start a new party to iterate.'}
-          </div>
-        ) : (
-          <div className="flex items-end gap-2">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={onKeyDown}
-              disabled={!!disabled || sending}
-              rows={2}
-              placeholder={`Ask ${personaName} to refine the branch…`}
-              className="flex-1 resize-none bg-slate-950 border border-slate-800 rounded-[7px] px-3 py-2 text-[13px] text-slate-100 placeholder-slate-600 focus:outline-none focus:border-slate-600 disabled:opacity-60"
-            />
-            <button
-              onClick={() => void sendMessage()}
-              disabled={!canSend}
-              aria-label="Send message"
-              className="shrink-0 h-9 w-9 inline-flex items-center justify-center rounded-[7px] bg-slate-50 text-slate-950 hover:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {sending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
-              )}
-            </button>
-          </div>
-        )}
-      </div>
+      {atTurnCap ? (
+        <div className="border-t border-slate-800/80 p-3 text-[12px] text-amber-300 font-mono">
+          Chat cap of {MAX_TURNS_PER_PARTY} turns reached. Ship the PR to
+          finalise — or start a fresh party.
+        </div>
+      ) : sandboxState === 'PAUSED' || sandboxState === 'TERMINATED' ? (
+        <div className="border-t border-slate-800/80 p-3 text-[12px] text-slate-400 font-mono">
+          {sandboxState === 'PAUSED'
+            ? 'Sandbox paused. Resume it above to keep chatting.'
+            : 'Sandbox terminated. Start a new party to iterate.'}
+        </div>
+      ) : (
+        <InputDock
+          draft={draft}
+          onDraftChange={setDraft}
+          onSend={() => void sendMessage()}
+          onUndo={undefined /* wired up in T3.4 */}
+          undoDisabled={latestAppliedIndex === null}
+          sending={sending}
+          disabled={!!disabled}
+          placeholder={`Ask ${personaName} to refine the branch…`}
+          canSend={canSend}
+        />
+      )}
 
       <DiffDrawer
         open={!!openDiff}

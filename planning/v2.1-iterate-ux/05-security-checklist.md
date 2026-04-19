@@ -47,11 +47,11 @@ From security-reviewer swarm pass (2026-04-19). Each item has severity, concrete
 - [x] 18 unit tests in `tests/safe-path.test.ts` (incl. `.env.example` whitelist, `.pem`, SSH keys, `.aws/credentials`, Windows backslash edge cases)
 - **Verify:** chat message asking Claude to read `.env` returns refusal in tool_result; marker string does not appear in chat pane
 
-### S7. Chip templates never interpolate user/repo strings — pending (lands with T3.3 InputDock)
-- [ ] All 5 chip templates are hard-coded client-side constants
-- [ ] No merge fields like `{{file}}`, `{{branch}}`, `{{issue}}` — if filename context is ever needed, user must type it themselves
-- **Verify:** grep source for chip template definitions; confirm no template-string interpolation with runtime values
-- **Note:** chips do not exist yet (T3.1 still uses the plain ChatPane input). Lock this in when writing the chip constant file — single `const CHIP_TEMPLATES: readonly { id: string; label: string; prompt: string }[]`.
+### S7. Chip templates never interpolate user/repo strings — ✅ shipped (T3.3)
+- [x] All 5 chip templates are hard-coded client-side constants in `src/app/party/[id]/chip-row.tsx` (`CHIP_TEMPLATES: readonly ChipTemplate[]`)
+- [x] No merge fields like `{{file}}`, `{{branch}}`, `{{issue}}`, no `${…}` template-literal interpolation
+- [x] `Undo last` is a direct-action chip (no textarea pass-through); the other four insert literal strings into the draft
+- **Verify:** `tests/chip-templates.test.ts` asserts no `${…}` / `{{…}}` in the array body, the 5 expected chip IDs exist, and no `party.*` / `repo.*` / `file.*` references appear
 
 ### S8. Managed-mode daily cost cap — deferred to v2.2
 - [ ] `User.dailyManagedCostUsd Decimal @default(0)` added
