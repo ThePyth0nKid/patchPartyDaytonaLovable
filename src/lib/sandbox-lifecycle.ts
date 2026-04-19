@@ -200,8 +200,19 @@ export async function terminateParty(partyId: string): Promise<void> {
       await getDaytona().delete(sb)
       // Only null the pointer when delete actually succeeded — otherwise
       // we orphan the sandbox in Daytona with no way to retry deletion.
+      // Also clear previewUrl/previewToken so a subsequent page load
+      // doesn't try to iframe a dead Daytona host (shows friendly
+      // "preview expired" copy instead of the raw 400 JSON).
       await prisma.agent
-        .update({ where: { id: agent.id }, data: { sandboxId: null } })
+        .update({
+          where: { id: agent.id },
+          data: {
+            sandboxId: null,
+            previewUrl: null,
+            previewToken: null,
+            sandboxTerminatedAt: new Date(),
+          },
+        })
         .catch(() => undefined)
     } catch (error: unknown) {
       log.warn('terminateParty: delete failed, leaving sandboxId for retry', {
@@ -250,11 +261,18 @@ export async function terminateLosers(
       await getDaytona().delete(sb)
       // Clear sandboxId + stamp termination time in a single update so the
       // cron reconciliation sweep (which keys off `sandboxTerminatedAt IS
-      // NULL`) correctly sees the row as handled.
+      // NULL`) correctly sees the row as handled. Also null the preview
+      // fields so the candidate drawer shows "expired" copy instead of
+      // iframing a dead Daytona host and surfacing raw 400 JSON.
       await prisma.agent
         .update({
           where: { id: row.id },
-          data: { sandboxId: null, sandboxTerminatedAt: new Date() },
+          data: {
+            sandboxId: null,
+            sandboxTerminatedAt: new Date(),
+            previewUrl: null,
+            previewToken: null,
+          },
         })
         .catch(() => undefined)
       return true

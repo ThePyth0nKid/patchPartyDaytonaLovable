@@ -62,17 +62,38 @@ export async function POST(req: NextRequest) {
   }
 
   const daytona = new Daytona()
-  let cleaned = 0
+  const terminated: string[] = []
   await Promise.all(
     allowed.map(async (id) => {
       try {
         const sb = await daytona.get(id)
         await daytona.delete(sb)
-        cleaned++
+        terminated.push(id)
       } catch (e) {
         log.warn('sandbox cleanup failed', { sandboxId: id, error: String(e) })
       }
     }),
   )
-  return NextResponse.json({ ok: true, cleaned })
+
+  // Clear the preview pointer fields on every agent whose sandbox we
+  // successfully killed. Without this the page reload after tab-close
+  // would iframe the dead Daytona host and surface raw 400 JSON.
+  // updateMany intentionally — the route has already ownership-filtered
+  // to this user's sandboxIds, so the update can't cross-pollute.
+  if (terminated.length > 0) {
+    await prisma.agent
+      .updateMany({
+        where: { sandboxId: { in: terminated } },
+        data: {
+          sandboxId: null,
+          sandboxTerminatedAt: new Date(),
+          previewUrl: null,
+          previewToken: null,
+        },
+      })
+      .catch((e) =>
+        log.warn('sandbox cleanup: db update failed', { error: String(e) }),
+      )
+  }
+  return NextResponse.json({ ok: true, cleaned: terminated.length })
 }

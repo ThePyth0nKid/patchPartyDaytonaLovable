@@ -817,14 +817,24 @@ function ComparePanel({
                 </div>
               </div>
 
-              {view === 'preview' && agent.result.previewUrl && (
-                <PreviewFrame
-                  src={`/api/preview/${encodePreviewTarget(agent.result.previewUrl, agent.result.previewToken)}/`}
-                  title={`${persona.name} live preview`}
-                  accent={accent}
-                  icon={persona.icon}
-                />
-              )}
+              {view === 'preview' &&
+                (agent.result.previewUrl ? (
+                  <PreviewFrame
+                    src={`/api/preview/${encodePreviewTarget(agent.result.previewUrl, agent.result.previewToken)}/`}
+                    title={`${persona.name} live preview`}
+                    accent={accent}
+                    icon={persona.icon}
+                  />
+                ) : (
+                  <div className="rounded-[7px] border border-slate-700 bg-slate-950/60 p-6 text-[13px] text-slate-300">
+                    <div className="text-[11px] font-mono font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
+                      Preview unavailable
+                    </div>
+                    The sandbox for this candidate has been terminated. Start a new
+                    party to generate a fresh preview, or switch to the Code tab
+                    above to inspect the implementation.
+                  </div>
+                ))}
 
               {view === 'code' && (
                 <div>

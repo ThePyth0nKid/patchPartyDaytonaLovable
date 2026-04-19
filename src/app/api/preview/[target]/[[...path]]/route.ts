@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server'
 import { isAllowedPreviewUrl } from '@/lib/preview-allowlist'
+import {
+  buildPreviewErrorHtml,
+  extractErrorHint,
+} from '@/lib/preview-error-html'
 
 export const dynamic = 'force-dynamic'
 
@@ -177,7 +181,44 @@ async function proxy(
   try {
     res = await fetch(upstream, init)
   } catch (e) {
+    // Upstream unreachable entirely (DNS, TLS, network). For top-level
+    // document requests serve a friendly HTML placeholder — the old
+    // plain-text response rendered inside the iframe as a raw line.
+    if (pathLooksLikeHtml(subPath) && req.method !== 'HEAD') {
+      return new Response(
+        buildPreviewErrorHtml({ status: 502, hint: String(e).slice(0, 240) }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'content-security-policy': "frame-ancestors 'self'",
+          },
+        },
+      )
+    }
     return new Response(`Upstream fetch failed: ${String(e)}`, { status: 502 })
+  }
+
+  // If the upstream rejected the top-level document (sandbox deleted,
+  // auto-stopped, or not-yet-reachable), surface a readable HTML page
+  // inside the iframe instead of streaming the raw Daytona error JSON.
+  // Sub-resource errors (js/css/images) pass through unchanged so the
+  // browser devtools still show the original status for debugging.
+  if (res.status >= 400 && pathLooksLikeHtml(subPath) && req.method !== 'HEAD') {
+    const upstreamCt = res.headers.get('content-type') ?? ''
+    const hint = extractErrorHint(await res.text(), upstreamCt)
+    return new Response(
+      buildPreviewErrorHtml({ status: res.status, hint }),
+      {
+        status: 200,
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          'content-security-policy': "frame-ancestors 'self'",
+        },
+      },
+    )
   }
 
   const out = new Headers(res.headers)
