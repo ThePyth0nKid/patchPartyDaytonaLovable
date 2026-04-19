@@ -16,6 +16,7 @@ import {
   MAX_TURNS_PER_PARTY,
   countChargeableTurns,
 } from '@/lib/chat-constants'
+import { formatCostUsd } from '@/lib/format-cost'
 import { TurnCard, type TurnCardData } from './turn-card'
 import { DiffDrawer } from './diff-drawer'
 import { InputDock } from './input-dock'
@@ -128,6 +129,22 @@ export function TurnColumn({
     [turns],
   )
   const atTurnCap = turnCountUsed >= MAX_TURNS_PER_PARTY
+
+  // T4.2: cumulative cost across the whole party. We sum every turn's
+  // costUsd (including failed + undone — the user paid for those) so the
+  // meter reflects the real $ spend, not just the effective work. Null /
+  // NaN cells are treated as 0.
+  const totalCostUsd = useMemo(() => {
+    let sum = 0
+    for (const t of turns) {
+      const n =
+        typeof t.costUsd === 'number' && Number.isFinite(t.costUsd)
+          ? t.costUsd
+          : 0
+      sum += n
+    }
+    return sum
+  }, [turns])
 
   const latestAppliedIndex = useMemo(() => {
     for (let i = turns.length - 1; i >= 0; i--) {
@@ -329,8 +346,14 @@ export function TurnColumn({
           </div>
         </div>
         <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.16em] text-slate-400">
-          <span>
+          <span
+            aria-label={`${turnCountUsed} of ${MAX_TURNS_PER_PARTY} turns used, ${formatCostUsd(totalCostUsd)} spent`}
+          >
             {turnCountUsed}/{MAX_TURNS_PER_PARTY}
+            <span className="text-slate-500 normal-case tracking-normal">
+              {' · '}
+              {formatCostUsd(totalCostUsd)} total
+            </span>
           </span>
           {onShipPR && (
             <button
