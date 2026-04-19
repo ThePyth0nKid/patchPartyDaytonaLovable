@@ -1,36 +1,7 @@
 import { NextRequest } from 'next/server'
+import { isAllowedPreviewUrl } from '@/lib/preview-allowlist'
 
 export const dynamic = 'force-dynamic'
-
-// SSRF allowlist. The `target` URL is user-controlled (base64-encoded in
-// the route segment), so we MUST refuse anything that isn't obviously a
-// Daytona preview. Without this check an authenticated user could point
-// the proxy at 169.254.169.254 (cloud metadata), an internal Railway
-// hostname, or file:// — and happily receive the response body.
-//
-// Daytona previews resolve to `*.proxy.daytona.work` today. We keep a
-// short hardcoded suffix list + allow overriding via env for self-hosted
-// Daytona installations.
-const PREVIEW_HOST_SUFFIXES = (() => {
-  const fromEnv = (process.env.DAYTONA_PREVIEW_HOST_SUFFIXES ?? '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-  const defaults = ['.daytona.work', '.daytona.app', '.daytona.io']
-  return fromEnv.length ? fromEnv : defaults
-})()
-
-function isAllowedPreviewUrl(raw: string): boolean {
-  let u: URL
-  try {
-    u = new URL(raw)
-  } catch {
-    return false
-  }
-  if (u.protocol !== 'https:') return false
-  const host = u.hostname.toLowerCase()
-  return PREVIEW_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))
-}
 
 function decodeTarget(target: string): { url: string; token?: string } | null {
   try {
