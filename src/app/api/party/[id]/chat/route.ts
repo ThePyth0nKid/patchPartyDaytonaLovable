@@ -12,6 +12,7 @@ import { getFallbackOctokit, getOctokitFor } from '@/lib/github'
 import { newTraceId, withTrace } from '@/lib/trace'
 import { log } from '@/lib/log'
 import { requireCsrfHeader } from '@/lib/csrf'
+import { checkChatRateLimit } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -34,6 +35,22 @@ export async function POST(
   }
   const csrf = requireCsrfHeader(req)
   if (csrf) return csrf
+
+  // Sliding-window rate limit: 4 chat turns / 60s per user (T2.2).
+  const rl = await checkChatRateLimit(session.user.id)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        error: `Too many requests. Try again in ${rl.retryAfterSeconds}s.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+      },
+    )
+  }
+
   const { id } = await ctx.params
 
   let body: unknown
