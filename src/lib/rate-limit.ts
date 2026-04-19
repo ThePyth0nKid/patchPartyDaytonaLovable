@@ -13,6 +13,7 @@
 
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
+import { log } from './log'
 
 export interface RateLimitResult {
   allowed: boolean
@@ -22,10 +23,23 @@ export interface RateLimitResult {
   remaining: number
 }
 
+let warnedMissingCreds = false
 function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
+  if (!url || !token) {
+    // Local dev without Upstash is expected; production with no limiter
+    // means every rate-limited route (chat, respawn) silently allows
+    // unlimited calls. Log once per process so it's grep-able in Railway
+    // but doesn't spam on every request.
+    if (process.env.NODE_ENV === 'production' && !warnedMissingCreds) {
+      warnedMissingCreds = true
+      log.error(
+        'UPSTASH_REDIS creds missing in production — rate limiters DISABLED',
+      )
+    }
+    return null
+  }
   return new Redis({ url, token })
 }
 

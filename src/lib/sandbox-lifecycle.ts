@@ -168,6 +168,20 @@ export async function respawnParty(partyId: string): Promise<RespawnResult> {
     }
   }
 
+  // Defense-in-depth: branchName is server-generated
+  // ("patchparty/{persona}/{partyId8}") and cannot currently contain
+  // shell metacharacters, but it is interpolated into `git clone --branch
+  // ${...}` below. Mirror the guard already enforced at the undo route so
+  // a future schema change or rogue direct-DB write can't turn this into
+  // RCE inside the sandbox.
+  if (!/^[A-Za-z0-9._/-]+$/.test(winner.branchName)) {
+    return {
+      ok: false,
+      method: 'failed',
+      error: 'Invalid branch name recorded for this agent.',
+    }
+  }
+
   const identity = await getGithubTokenForUser(party.userId)
   if (!identity) {
     return {
@@ -232,23 +246,29 @@ export async function respawnParty(partyId: string): Promise<RespawnResult> {
 
     const preview = await sandbox.getPreviewLink(3000)
 
-    await prisma.agent.update({
-      where: { id: winner.id },
-      data: {
-        sandboxId: sandbox.id,
-        previewUrl: preview.url,
-        previewToken: preview.token,
-        sandboxTerminatedAt: null,
-      },
-    })
-    await prisma.party.update({
-      where: { id: partyId },
-      data: {
-        sandboxState: 'ACTIVE',
-        sandboxLastActivityAt: new Date(),
-        sandboxPausedAt: null,
-      },
-    })
+    // Atomic write: if we update Agent but crash before Party, the party
+    // sticks in RESUMING forever (the optimistic-claim guard rejects
+    // retries from that state). $transaction bundles both writes so
+    // either both land or neither does.
+    await prisma.$transaction([
+      prisma.agent.update({
+        where: { id: winner.id },
+        data: {
+          sandboxId: sandbox.id,
+          previewUrl: preview.url,
+          previewToken: preview.token,
+          sandboxTerminatedAt: null,
+        },
+      }),
+      prisma.party.update({
+        where: { id: partyId },
+        data: {
+          sandboxState: 'ACTIVE',
+          sandboxLastActivityAt: new Date(),
+          sandboxPausedAt: null,
+        },
+      }),
+    ])
 
     void emitEvent(EventType.SANDBOX_RESUMED, {
       partyId,

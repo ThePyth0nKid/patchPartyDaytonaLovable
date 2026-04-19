@@ -55,6 +55,14 @@ export function getFallbackOctokit(): Octokit | null {
   return getOctokitWithToken(token)
 }
 
+// GitHub owner/repo names only contain [A-Za-z0-9._-] (see
+// https://docs.github.com/en/get-started/learning-about-github/types-of-github-accounts).
+// A loose `[^/]+` matcher let shell metacharacters (`;`, backticks,
+// `$(...)`) reach the `git clone` command in agent.ts / sandbox-lifecycle.ts.
+// We tighten at the parse boundary so every downstream consumer gets a
+// safe value for free.
+const OWNER_OR_REPO = /^[A-Za-z0-9._-]+$/
+
 export function parseIssueUrl(url: string): {
   owner: string
   repo: string
@@ -62,7 +70,9 @@ export function parseIssueUrl(url: string): {
 } | null {
   const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/)
   if (!match) return null
-  return { owner: match[1], repo: match[2], number: parseInt(match[3], 10) }
+  const [, owner, repo, num] = match
+  if (!OWNER_OR_REPO.test(owner) || !OWNER_OR_REPO.test(repo)) return null
+  return { owner, repo, number: parseInt(num, 10) }
 }
 
 export interface FetchedIssue {
