@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma'
 import { terminateLosers } from '@/lib/sandbox-lifecycle'
 import { emitEvent, EventType } from '@/lib/events'
 import { log } from '@/lib/log'
+import { requireCsrfHeader } from '@/lib/csrf'
 
 const Schema = z
   .object({
@@ -32,6 +33,8 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireCsrfHeader(req)
+  if (csrf) return csrf
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

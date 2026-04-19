@@ -11,6 +11,7 @@ import { runChatTurn, type ChatSseEvent } from '@/lib/chat'
 import { getFallbackOctokit, getOctokitFor } from '@/lib/github'
 import { newTraceId, withTrace } from '@/lib/trace'
 import { log } from '@/lib/log'
+import { requireCsrfHeader } from '@/lib/csrf'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,6 +28,8 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireCsrfHeader(req)
+  if (csrf) return csrf
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

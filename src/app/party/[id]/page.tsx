@@ -7,6 +7,7 @@ import { PERSONAS, PHILOSOPHY_PERSONAS, PersonaId } from '@/lib/personas'
 import { Party, AgentState, PartyEvent, PartyState, SandboxState } from '@/lib/types'
 import { ChatPane } from './chat-pane'
 import { ResumeCard } from './resume-card'
+import { csrfFetch } from '@/lib/client-fetch'
 
 const PERSONA_ACCENTS: Record<string, string> = {
   hackfix: '#FF6B35',
@@ -58,6 +59,15 @@ function PreviewFrame({
         src={src}
         title={title}
         onLoad={() => setLoaded(true)}
+        // allow-scripts + allow-same-origin: needed for the preview to run
+        //   its own JS and talk to its own origin (HMR, XHR to the sandbox).
+        // allow-forms: the preview is a live app; forms inside should work.
+        // allow-popups-to-escape-sandbox: an `<a target="_blank">` inside
+        //   the preview opens a normal window rather than another sandbox.
+        // allow-top-navigation is deliberately absent — a compromised
+        //   preview must not be able to navigate the parent away.
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox"
+        referrerPolicy="no-referrer"
         className={`w-full h-full bg-white transition-opacity duration-500 ease-linear ${
           loaded ? 'opacity-100' : 'opacity-0'
         }`}
@@ -247,7 +257,7 @@ export default function PartyPage({
     if (!partyState?.pickedPersona) return
     setShippingPr(true)
     try {
-      const res = await fetch(`/api/party/${id}/pr`, {
+      const res = await csrfFetch(`/api/party/${id}/pr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personaId: partyState.pickedPersona }),
@@ -664,7 +674,7 @@ function ComparePanel({
     setPicking(true)
     setPickError(null)
     try {
-      const res = await fetch(`/api/party/${party.id}/pick`, {
+      const res = await csrfFetch(`/api/party/${party.id}/pick`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personaId: selectedPersona }),

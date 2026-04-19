@@ -16,7 +16,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { Daytona, type Sandbox } from '@daytonaio/sdk'
 import { Prisma } from '@prisma/client'
-import * as posixPath from 'node:path/posix'
 import { getPersona, PersonaId } from './personas'
 import { prisma } from './prisma'
 import { loadKey } from './byok'
@@ -26,24 +25,21 @@ import { log } from './log'
 import { computeCost, RATES } from './costing'
 import { parseDiffStats, type FileDiffStat } from './diff-stats'
 import { setupGitAskpass, tokenlessGitHubRemote } from './git-askpass'
+import { checkSandboxPath, type PathRejection } from './safe-path'
 
 export { parseDiffStats, type FileDiffStat }
 
-/**
- * Resolve a model-supplied path against the sandbox repo root, refusing
- * any value that would escape the directory. Prevents Claude (or a prompt
- * injection inside file content Claude reads) from tricking us into
- * read/write of /etc/passwd, ~/.ssh/*, etc.
- */
-function safeSandboxPath(repoDir: string, userPath: string): string | null {
-  if (typeof userPath !== 'string' || userPath.length === 0) return null
-  if (userPath.includes('\0')) return null
-  // Reject absolute paths outright; we only accept repo-relative values.
-  if (userPath.startsWith('/')) return null
-  const resolved = posixPath.normalize(`${repoDir}/${userPath}`)
-  const root = repoDir.endsWith('/') ? repoDir : `${repoDir}/`
-  if (resolved !== repoDir && !resolved.startsWith(root)) return null
-  return resolved
+function pathRejectionMessage(
+  userPath: string,
+  reason: PathRejection,
+): string {
+  if (reason === 'secret') {
+    return `Access to "${userPath}" denied: this path matches PatchParty's secrets-file deny-list (.env*, .pem/.key, id_rsa, credentials, .netrc). Ask the user for the values you need via chat instead.`
+  }
+  if (reason === 'escape') {
+    return `Path "${userPath}" escapes the repo root. Use a repo-relative path.`
+  }
+  return `Invalid path: "${userPath}".`
 }
 
 // Lazy singleton — see sandbox-lifecycle.ts for rationale (build-time import).
@@ -187,10 +183,14 @@ async function executeTool(
 ): Promise<{ output: string; isError: boolean; applied?: string }> {
   if (name === 'read_file') {
     const { path } = input as { path: string }
-    const safe = safeSandboxPath(repoDir, path)
-    if (!safe) {
-      return { output: `read_file refused: path "${path}" escapes the repo root.`, isError: true }
+    const check = checkSandboxPath(repoDir, path)
+    if (!check.ok || !check.resolved) {
+      return {
+        output: `read_file refused: ${pathRejectionMessage(path, check.reason ?? 'invalid')}`,
+        isError: true,
+      }
     }
+    const safe = check.resolved
     try {
       const buf = await sandbox.fs.downloadFile(safe)
       const text = buf.toString('utf-8')
@@ -206,10 +206,14 @@ async function executeTool(
       mode: 'replace' | 'patch'
       content: string
     }
-    const safe = safeSandboxPath(repoDir, path)
-    if (!safe) {
-      return { output: `apply_edit refused: path "${path}" escapes the repo root.`, isError: true }
+    const check = checkSandboxPath(repoDir, path)
+    if (!check.ok || !check.resolved) {
+      return {
+        output: `apply_edit refused: ${pathRejectionMessage(path, check.reason ?? 'invalid')}`,
+        isError: true,
+      }
     }
+    const safe = check.resolved
     const lineCount = content.split('\n').length
     if (lineCount > MAX_EDIT_LINES) {
       return {

@@ -10,6 +10,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { PersonaId } from '@/lib/personas'
+import { csrfFetch } from '@/lib/client-fetch'
 
 const MAX_TURNS_PER_PARTY = 20
 
@@ -160,7 +161,7 @@ export function ChatPane({
     setSending(true)
 
     try {
-      const res = await fetch(`/api/party/${partyId}/chat`, {
+      const res = await csrfFetch(`/api/party/${partyId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),

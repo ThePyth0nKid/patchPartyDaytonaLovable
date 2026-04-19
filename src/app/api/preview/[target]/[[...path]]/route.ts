@@ -185,6 +185,12 @@ async function proxy(
   out.delete('content-encoding')
   out.delete('content-length')
   out.set('cache-control', 'no-store')
+  // Clamp where the preview can be embedded. Combined with the app-wide
+  // `frame-src 'self'` (next.config.js) this means: only our own origin
+  // may iframe the preview, and the preview iframe can only load stuff
+  // served through this proxy. A phished/forged page cannot embed a
+  // user's preview to capture keystrokes.
+  out.set('content-security-policy', "frame-ancestors 'self'")
 
   const origCt = (res.headers.get('content-type') || '').toLowerCase()
   const prefix = `/api/preview/${target}`

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Loader2, Play, PauseCircle, AlertTriangle } from 'lucide-react'
+import { csrfFetch } from '@/lib/client-fetch'
 
 interface ResumeCardProps {
   partyId: string
@@ -19,7 +20,7 @@ export function ResumeCard({ partyId, sandboxState, onResumed }: ResumeCardProps
     setResuming(true)
     setError(null)
     try {
-      const res = await fetch(`/api/party/${partyId}/resume`, {
+      const res = await csrfFetch(`/api/party/${partyId}/resume`, {
         method: 'POST',
       })
       const data = (await res.json().catch(() => ({}))) as {

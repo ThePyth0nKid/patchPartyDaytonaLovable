@@ -9,11 +9,14 @@ import {
 import { getPersona, PersonaId } from '@/lib/personas'
 import { parseBody, PickPatchSchema } from '@/lib/validation'
 import { log } from '@/lib/log'
+import { requireCsrfHeader } from '@/lib/csrf'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireCsrfHeader(req)
+  if (csrf) return csrf
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json(

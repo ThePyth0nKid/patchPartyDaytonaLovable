@@ -8,13 +8,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { resumeParty, markActivity } from '@/lib/sandbox-lifecycle'
+import { requireCsrfHeader } from '@/lib/csrf'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const csrf = requireCsrfHeader(req)
+  if (csrf) return csrf
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
