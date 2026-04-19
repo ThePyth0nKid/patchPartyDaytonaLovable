@@ -87,19 +87,19 @@ Copy this block into the final v2.1 PR body:
 ## Security changes
 
 HIGH (must-have):
-- [ ] S1 iframe sandbox + CSP
-- [ ] S2 safe diff rendering (prism-react-renderer)
-- [ ] S3 rate limit on /chat + inflight lock
+- [x] S1 iframe sandbox + CSP
+- [x] S2 safe diff rendering (prism-react-renderer)
+- [x] S3 rate limit on /chat + inflight lock
 
 MEDIUM:
 - [x] S4 CSRF custom header
 - [x] S5 PR body HTML-comment strip
 - [x] S6 secrets-file deny-list in read_file
 - [x] S7 hard-coded chip templates
-- [ ] S8 daily cost cap (or deferred with link)
+- [x] S8 daily cost cap — deferred to v2.2 (see deferred.md)
 
 LOW (audit):
-- [ ] S9 sandbox-cleanup ownership check
-- [ ] S10 undo as soft-delete
-- [ ] S11 viewport toggle client-side only
+- [x] S9 sandbox-cleanup ownership check (promoted to CRITICAL + fixed in D9)
+- [x] S10 undo as soft-delete
+- [x] S11 viewport toggle client-side only
 ```
