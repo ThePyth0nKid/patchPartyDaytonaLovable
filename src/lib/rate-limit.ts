@@ -22,16 +22,35 @@ export interface RateLimitResult {
   remaining: number
 }
 
-function buildLimiter(): Ratelimit | null {
+function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
-  const redis = new Redis({ url, token })
+  return new Redis({ url, token })
+}
+
+function buildLimiter(): Ratelimit | null {
+  const redis = getRedis()
+  if (!redis) return null
   return new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(4, '60 s'),
     analytics: false,
     prefix: 'patchparty:chat',
+  })
+}
+
+function buildRespawnLimiter(): Ratelimit | null {
+  const redis = getRedis()
+  if (!redis) return null
+  // Respawn boots a whole Daytona sandbox (~30–90 s, ~$0.01–0.05 of
+  // compute). 2 per 5 min is generous for a human retrying after a
+  // failure and tight enough to stop click-spam from draining the quota.
+  return new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(2, '300 s'),
+    analytics: false,
+    prefix: 'patchparty:respawn',
   })
 }
 
@@ -43,6 +62,14 @@ function getLimiter(): Ratelimit | null {
   return limiterSingleton
 }
 
+let respawnLimiterSingleton: Ratelimit | null | undefined
+function getRespawnLimiter(): Ratelimit | null {
+  if (respawnLimiterSingleton === undefined) {
+    respawnLimiterSingleton = buildRespawnLimiter()
+  }
+  return respawnLimiterSingleton
+}
+
 /**
  * Consume one token for this user. Returns `{allowed:false, retryAfterSeconds}`
  * when the sliding window is full. If Upstash isn't configured, always
@@ -52,6 +79,35 @@ export async function checkChatRateLimit(
   userId: string,
 ): Promise<RateLimitResult> {
   const limiter = getLimiter()
+  if (!limiter) {
+    return { allowed: true, retryAfterSeconds: 0, remaining: -1 }
+  }
+  const result = await limiter.limit(`user:${userId}`)
+  if (result.success) {
+    return {
+      allowed: true,
+      retryAfterSeconds: 0,
+      remaining: result.remaining,
+    }
+  }
+  const retryAfterMs = Math.max(0, result.reset - Date.now())
+  return {
+    allowed: false,
+    retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
+    remaining: 0,
+  }
+}
+
+/**
+ * Consume one token for this user on the respawn limiter. Respawn is
+ * strictly more expensive than chat (spins a fresh Daytona sandbox), so
+ * the window is tighter: 2 per 5 min. Same graceful no-op when Upstash
+ * isn't configured.
+ */
+export async function checkRespawnRateLimit(
+  userId: string,
+): Promise<RateLimitResult> {
+  const limiter = getRespawnLimiter()
   if (!limiter) {
     return { allowed: true, retryAfterSeconds: 0, remaining: -1 }
   }

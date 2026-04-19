@@ -11,14 +11,21 @@
 //
 // Activity = any chat turn, command exec, or explicit heartbeat.
 
-import { Daytona } from '@daytonaio/sdk'
+import { Daytona, type Sandbox } from '@daytonaio/sdk'
 import { prisma } from './prisma'
 import { emitEvent, EventType } from './events'
 import { log } from './log'
+import { getGithubTokenForUser } from './github'
+import { setupGitAskpass, tokenlessGitHubRemote } from './git-askpass'
 
 export const IDLE_WARN_AFTER_MIN = 10
 export const PAUSE_AFTER_MIN = 15
 export const TERMINATE_AFTER_DAYS = 7
+
+// Matches PREVIEW_LIFETIME_MINUTES in agent.ts — importing would drag
+// anthropic + persona code into every caller of this module. Duplicated
+// on purpose; if you change one, grep for the other.
+const RESPAWN_AUTOSTOP_MINUTES = 15
 
 // Lazy singleton: constructing Daytona at module load fails if
 // DAYTONA_API_KEY is missing (e.g. `next build` page-data collection),
@@ -103,6 +110,188 @@ export interface ResumeResult {
   ok: boolean
   method: 'resumed' | 'respawned' | 'failed'
   error?: string
+}
+
+export interface RespawnResult {
+  ok: boolean
+  method: 'respawned' | 'failed'
+  error?: string
+  previewUrl?: string
+}
+
+/**
+ * Recreate the winning agent's sandbox from its GitHub feature branch.
+ * Used when Daytona has permanently deleted a post-pick sandbox (e.g.
+ * the party was idle past the auto-stop window and the proxy now 400s
+ * the iframe with "Sandbox with ID … not found").
+ *
+ * Flow: clone the persona's branch into a fresh Daytona sandbox, run
+ * `npm install`, start `npm run dev` detached, fetch the preview link
+ * via SDK, write the new `sandboxId`/`previewUrl`/`previewToken` back
+ * onto the Agent row, and flip the party's `sandboxState` to ACTIVE.
+ *
+ * Preconditions:
+ *   - Party has a `chatSessionAgentId` (post-pick only; pre-pick
+ *     candidates are intentionally not respawnable — user should start
+ *     a new party).
+ *   - Winning agent has a `branchName` pushed to GitHub.
+ *   - The user still has a valid GitHub OAuth token in Account.
+ *
+ * Concurrency: takes a RESUMING claim on the Party row. Two parallel
+ * respawn attempts → second one short-circuits with "already resuming".
+ */
+export async function respawnParty(partyId: string): Promise<RespawnResult> {
+  const party = await prisma.party.findUnique({
+    where: { id: partyId },
+    include: { agents: true },
+  })
+  if (!party) {
+    return { ok: false, method: 'failed', error: 'party not found' }
+  }
+  if (!party.chatSessionAgentId) {
+    return {
+      ok: false,
+      method: 'failed',
+      error:
+        'This party has not been picked yet — respawn only works after you pick a persona.',
+    }
+  }
+  const winner = party.agents.find((a) => a.id === party.chatSessionAgentId)
+  if (!winner) {
+    return { ok: false, method: 'failed', error: 'winner agent missing' }
+  }
+  if (!winner.branchName) {
+    return {
+      ok: false,
+      method: 'failed',
+      error: 'No branch recorded for the winning agent — cannot respawn.',
+    }
+  }
+
+  const identity = await getGithubTokenForUser(party.userId)
+  if (!identity) {
+    return {
+      ok: false,
+      method: 'failed',
+      error: 'Your GitHub token is no longer available. Sign in again.',
+    }
+  }
+
+  // Optimistic claim: only transition from TERMINATED / PAUSED / IDLE_WARN
+  // into RESUMING. Blocks double-clicks and cron-vs-user races.
+  const claimed = await prisma.party.updateMany({
+    where: {
+      id: partyId,
+      sandboxState: { in: ['TERMINATED', 'PAUSED', 'IDLE_WARN'] },
+    },
+    data: { sandboxState: 'RESUMING' },
+  })
+  if (claimed.count === 0) {
+    return {
+      ok: false,
+      method: 'failed',
+      error:
+        'Sandbox is already active or being resumed. Refresh the page in a few seconds.',
+    }
+  }
+
+  let sandbox: Sandbox | undefined
+  try {
+    sandbox = await getDaytona().create({
+      language: 'typescript',
+      public: true,
+      autoStopInterval: RESPAWN_AUTOSTOP_MINUTES,
+    })
+
+    // Clone via GIT_ASKPASS so the token never lands in argv — Daytona
+    // captures command argv in its own logs. Private repos need auth;
+    // public repos tolerate it with no extra cost.
+    const askpass = await setupGitAskpass(sandbox, identity.token)
+    try {
+      const remote = tokenlessGitHubRemote(party.repoOwner, party.repoName)
+      await sandbox.process.executeCommand(
+        `cd /home/daytona && ${askpass.envPrefix} git -c credential.helper= clone --depth 50 --single-branch --branch ${winner.branchName} "${remote}" repo`,
+      )
+    } finally {
+      await askpass.cleanup()
+    }
+
+    await sandbox.process.executeCommand(
+      'cd /home/daytona/repo && npm install --no-audit --no-fund --prefer-offline',
+      undefined,
+      undefined,
+      300_000,
+    )
+    await sandbox.process.executeCommand(
+      'cd /home/daytona/repo && nohup npm run dev > /tmp/dev.log 2>&1 &',
+    )
+    // Same 4 s binding wait as the initial boot in agent.ts. getPreviewLink
+    // succeeds as long as the port is registered with Daytona — the app
+    // doesn't need to be fully listening yet; Vite/Next bind fast.
+    await new Promise((resolve) => setTimeout(resolve, 4000))
+
+    const preview = await sandbox.getPreviewLink(3000)
+
+    await prisma.agent.update({
+      where: { id: winner.id },
+      data: {
+        sandboxId: sandbox.id,
+        previewUrl: preview.url,
+        previewToken: preview.token,
+        sandboxTerminatedAt: null,
+      },
+    })
+    await prisma.party.update({
+      where: { id: partyId },
+      data: {
+        sandboxState: 'ACTIVE',
+        sandboxLastActivityAt: new Date(),
+        sandboxPausedAt: null,
+      },
+    })
+
+    void emitEvent(EventType.SANDBOX_RESUMED, {
+      partyId,
+      agentId: winner.id,
+      sandboxId: sandbox.id,
+    })
+
+    return { ok: true, method: 'respawned', previewUrl: preview.url }
+  } catch (error: unknown) {
+    // Half-built sandbox → best-effort delete so we don't leak cost.
+    if (sandbox) {
+      try {
+        await getDaytona().delete(sandbox)
+      } catch (cleanupErr) {
+        log.warn('respawnParty: cleanup delete failed', {
+          partyId,
+          error: String(cleanupErr),
+        })
+      }
+    }
+    // Revert RESUMING → TERMINATED so the user can retry. Don't go back
+    // to PAUSED; the original sandbox is gone and a resume would fail.
+    await prisma.party
+      .updateMany({
+        where: { id: partyId, sandboxState: 'RESUMING' },
+        data: { sandboxState: 'TERMINATED' },
+      })
+      .catch(() => undefined)
+
+    log.warn('respawnParty: boot failed', {
+      partyId,
+      branchName: winner.branchName,
+      error: String(error),
+    })
+    // Never forward raw SDK errors — they can leak internal hostnames
+    // or token fragments. Full error is in the server log.
+    return {
+      ok: false,
+      method: 'failed',
+      error:
+        'Could not recreate sandbox. The branch is still on GitHub — try again in a moment.',
+    }
+  }
 }
 
 /**

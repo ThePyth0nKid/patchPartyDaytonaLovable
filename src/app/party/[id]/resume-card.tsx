@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Play, PauseCircle, AlertTriangle } from 'lucide-react'
+import { Loader2, Play, PauseCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 import { csrfFetch } from '@/lib/client-fetch'
 
 interface ResumeCardProps {
@@ -12,6 +12,7 @@ interface ResumeCardProps {
 
 export function ResumeCard({ partyId, sandboxState, onResumed }: ResumeCardProps) {
   const [resuming, setResuming] = useState(false)
+  const [respawning, setRespawning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   if (sandboxState === 'ACTIVE') return null
@@ -38,18 +39,57 @@ export function ResumeCard({ partyId, sandboxState, onResumed }: ResumeCardProps
     }
   }
 
+  async function handleRespawn() {
+    setRespawning(true)
+    setError(null)
+    try {
+      const res = await csrfFetch(`/api/party/${partyId}/respawn`, {
+        method: 'POST',
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+      }
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? `respawn failed (${res.status})`)
+      }
+      onResumed?.()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRespawning(false)
+    }
+  }
+
   if (sandboxState === 'TERMINATED') {
     return (
       <div className="rounded-[7px] border border-red-500/40 bg-red-500/5 p-4 flex items-start gap-3">
         <AlertTriangle className="w-4 h-4 mt-0.5 text-red-300 shrink-0" />
-        <div className="flex-1 text-[13px] text-red-200">
+        <div className="flex-1 min-w-0 text-[13px] text-red-200">
           <div className="font-semibold mb-1">Sandbox terminated</div>
           <div className="text-[12px] text-red-200/80">
             This party was idle for too long and its sandbox was reclaimed.
-            The branch is still on GitHub — start a new party if you want to
-            keep iterating.
+            The branch is still on GitHub — respawn to rebuild the preview
+            from that branch (~30–60 s).
           </div>
+          {error && (
+            <div className="text-[11px] text-red-300 mt-1 font-mono break-words">
+              {error}
+            </div>
+          )}
         </div>
+        <button
+          onClick={handleRespawn}
+          disabled={respawning}
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-red-300 text-slate-950 text-[12px] font-semibold uppercase tracking-[0.14em] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {respawning ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+          {respawning ? 'Respawning…' : 'Respawn'}
+        </button>
       </div>
     )
   }
