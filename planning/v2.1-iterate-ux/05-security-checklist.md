@@ -10,12 +10,11 @@ From security-reviewer swarm pass (2026-04-19). Each item has severity, concrete
 - [x] App-wide `next.config.js` CSP: `frame-src 'self'`
 - **Verify:** browser devtools → inspect iframe → `sandbox` attr present; `window.parent.document` from iframe → SecurityError
 
-### S2. Diff/code rendering XSS — pending (lands with T2.4 + T3.2)
-- [ ] Use `prism-react-renderer` (element-based) for syntax highlighting
-- [ ] No `dangerouslySetInnerHTML` path for any Claude-influenced content
-- [ ] If any HTML output is unavoidable, route through `isomorphic-dompurify.sanitize(html, { ALLOWED_TAGS: [...safe list] })`; explicitly exclude `script`, `iframe`, `object`, `embed`, and all `on*` event handler attributes
-- **Verify:** fixture diff content `</pre><script>alert(1)</script><pre>` renders as literal text; no alert; no DOM script node injected
-- **Blocker until:** DiffDrawer is built. T3.1 kept ChatPane (no diff rendering yet) — no Claude-generated HTML reaches the DOM today.
+### S2. Diff/code rendering XSS — ✅ shipped (T2.4 + T3.2)
+- [x] `prism-react-renderer`'s `Highlight` element API drives syntax highlighting in `src/app/party/[id]/diff-drawer.tsx` — no HTML strings reach the DOM
+- [x] Zero `dangerouslySetInnerHTML={...}` JSX props anywhere in the DiffDrawer / TurnCard / TurnColumn tree (enforced by `tests/diff-drawer-xss.test.ts`)
+- [x] Diff content arrives from `/api/party/[id]/turns/[idx]/diff` which path-validates via `checkSandboxPath` and commit-SHA-pins the request
+- **Verify:** `tests/diff-drawer-xss.test.ts` asserts the attacker fixture `</pre><script>alert(1)</script><pre>` classifies as a plain context line (never routed to any raw-HTML sink)
 
 ### S3. Rate limit on /api/party/[id]/chat — ✅ shipped (T2.2)
 - [x] Per-user sliding window: 4 requests / 60s (based on `session.user.id`)

@@ -15,7 +15,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { SandboxState } from '@/lib/types'
 import type { PersonaId } from '@/lib/personas'
-import { ChatPane } from './chat-pane'
+import { TurnColumn } from './turn-column'
 import { PreviewPane, encodePreviewTarget } from './preview-pane'
 import { SandboxBanner } from './sandbox-banner'
 import type { Viewport } from './viewport-toggle'
@@ -112,10 +112,9 @@ export function IteratePage({
         </div>
 
         <div className="min-w-0">
-          <ChatPane
+          <TurnColumn
             partyId={partyId}
             partyTitle={partyTitle}
-            personaId={personaId}
             personaName={personaName}
             personaAccent={personaAccent}
             sandboxState={sandboxState}

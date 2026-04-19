@@ -49,7 +49,8 @@ function getDaytona(): Daytona {
   return _daytona
 }
 
-export const MAX_TURNS_PER_PARTY = 20
+export { MAX_TURNS_PER_PARTY } from './chat-constants'
+import { MAX_TURNS_PER_PARTY } from './chat-constants'
 export const TOOL_LOOP_CAP = 8
 export const TURN_TIMEOUT_MS = 120_000
 export const MAX_EDIT_LINES = 500
