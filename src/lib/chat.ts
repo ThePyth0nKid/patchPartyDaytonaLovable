@@ -322,14 +322,20 @@ async function reserveTurnSlot(
   for (let attempt = 0; attempt < RESERVATION_MAX_RETRIES; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
-        // Two-integer pg_try_advisory_xact_lock(key1, key2) composes a 64-bit
+        // Two-integer pg_try_advisory_xact_lock(int, int) composes a 64-bit
         // lock key, so two distinct partyIds whose hashtext collides on the
         // first int4 still get different locks on the second. Using length
         // as the second key is cheap and stable.
+        //
+        // The ::int cast is load-bearing: Prisma serialises a JS number
+        // template parameter as `bigint`, which makes Postgres resolve the
+        // call to `pg_try_advisory_xact_lock(int, bigint)` — an overload
+        // that does not exist (42883). Without the cast every chat turn
+        // fails with "internal error" at the reservation step.
         const lockRow = await tx.$queryRaw<{ ok: boolean }[]>`
           SELECT pg_try_advisory_xact_lock(
             hashtext(${partyId}),
-            ${partyId.length}
+            ${partyId.length}::int
           ) AS ok
         `
         if (!lockRow[0]?.ok) return { kind: 'inflight' as const }

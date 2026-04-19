@@ -157,10 +157,14 @@ export async function POST(
     | { ok: false; status: number; error: string }
   try {
     reservation = await prisma.$transaction(async (tx) => {
+      // ::int cast on the second key avoids the "function does not exist
+      // (int, bigint)" error — Prisma serialises JS numbers as bigint and
+      // Postgres only has (int, int) and (bigint) overloads of
+      // pg_try_advisory_xact_lock. Matches src/lib/chat.ts.
       const lockRow = await tx.$queryRaw<{ ok: boolean }[]>`
         SELECT pg_try_advisory_xact_lock(
           hashtext(${id}),
-          ${id.length}
+          ${id.length}::int
         ) AS ok
       `
       if (!lockRow[0]?.ok) {

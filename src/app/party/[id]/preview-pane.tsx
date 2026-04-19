@@ -111,7 +111,15 @@ export function PreviewPane({
         </div>
       </div>
 
-      <div className="relative bg-slate-950 rounded-[7px] overflow-hidden border border-slate-800 flex-1 min-h-[520px]">
+      {/*
+        Explicit height is load-bearing: `h-full` on the iframe resolves
+        against its nearest ancestor with a concrete height, and a grid
+        cell with `items-start` + a flex parent with only `min-height`
+        leaves the iframe at its HTML default (≈150 px). Using svh
+        (small-viewport-height) so mobile-browser chrome doesn't crop
+        us. `min-h-[520px]` is the floor for short viewports.
+      */}
+      <div className="relative bg-slate-950 rounded-[7px] overflow-hidden border border-slate-800 h-[calc(100svh-9rem)] min-h-[520px]">
         {viewport === 'desktop' ? (
           <div className="w-full h-full">{iframeEl}</div>
         ) : (
