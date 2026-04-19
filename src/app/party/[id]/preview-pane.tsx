@@ -19,8 +19,6 @@ import type { LucideIcon } from 'lucide-react'
 import { PreviewFrame } from './preview-frame'
 import { ViewportToggle, type Viewport } from './viewport-toggle'
 
-export { encodePreviewTarget } from '@/lib/preview-target'
-
 interface PreviewPaneProps {
   src: string
   title: string

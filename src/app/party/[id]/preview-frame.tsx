@@ -11,6 +11,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Spinner } from '@/components/ui/spinner'
+import { cn } from '@/lib/utils'
 
 interface PreviewFrameProps {
   src: string
@@ -40,7 +41,14 @@ export function PreviewFrame({
 
   return (
     <div
-      className={`relative bg-slate-950 rounded-[7px] overflow-hidden border border-slate-800 ${className}`}
+      className={cn(
+        // Defaults — callers can override via `className`. `cn` uses
+        // `tailwind-merge`, so `rounded-none`/`border-0` from the caller
+        // correctly win over the defaults below (last-write-wins per
+        // utility group) instead of colliding at CSS-parse time.
+        'relative bg-slate-950 rounded-[7px] overflow-hidden border border-slate-800',
+        className,
+      )}
     >
       <iframe
         src={src}
