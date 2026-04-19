@@ -55,6 +55,7 @@ export function IteratePage({
   prUrl,
 }: IteratePageProps) {
   const [viewport, setViewport] = useState<Viewport>('desktop')
+  const [expanded, setExpanded] = useState(false)
 
   // Hydrate from localStorage on mount so a user's last choice persists
   // across parties. Must run client-only — hence the useEffect.
@@ -66,6 +67,33 @@ export function IteratePage({
       /* localStorage disabled — fall back to the default */
     }
   }, [])
+
+  // Esc collapses fullscreen — but yield to any open dialog (diff-drawer,
+  // ship-sheet) so the innermost modal closes first. Both set role="dialog"
+  // on their container and only mount the node when open, so the selector
+  // resolves to null when no dialog is active.
+  useEffect(() => {
+    if (!expanded) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('[role="dialog"]')) return
+      setExpanded(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [expanded])
+
+  // Body scroll lock while expanded. Restore the prior inline style on
+  // cleanup (not a hard-coded '' — another component may already have
+  // locked scroll for its own modal).
+  useEffect(() => {
+    if (!expanded) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [expanded])
 
   function handleViewportChange(v: Viewport) {
     setViewport(v)
@@ -94,7 +122,20 @@ export function IteratePage({
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_480px] items-start">
-        <div className="lg:sticky lg:top-16 min-w-0">
+        {/*
+          className-only transition between in-place and fullscreen (D15):
+          the DOM node and its children stay mounted, so the iframe does
+          not reload when the user toggles. Chat column is intentionally
+          NOT hidden while expanded (D10) — the fullscreen overlay covers
+          it in place, preserving scrollTop on collapse.
+        */}
+        <div
+          className={
+            expanded
+              ? 'fixed inset-0 z-50 bg-slate-950 p-4 overflow-auto'
+              : 'lg:sticky lg:top-16 min-w-0'
+          }
+        >
           {previewSrc ? (
             <PreviewPane
               src={previewSrc}
@@ -104,6 +145,8 @@ export function IteratePage({
               viewport={viewport}
               onViewportChange={handleViewportChange}
               sandboxState={sandboxState}
+              expanded={expanded}
+              onToggleExpand={() => setExpanded((e) => !e)}
             />
           ) : (
             <div className="rounded-[7px] border border-slate-800 bg-slate-900/60 p-6 text-[13px] text-slate-300">

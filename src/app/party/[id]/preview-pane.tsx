@@ -15,7 +15,7 @@
 // ComparePanel on the party page now reuses PreviewFrame too — one
 // codepath for iframe chrome.
 
-import type { LucideIcon } from 'lucide-react'
+import { Maximize2, Minimize2, type LucideIcon } from 'lucide-react'
 import { PreviewFrame } from './preview-frame'
 import { ViewportToggle, type Viewport } from './viewport-toggle'
 
@@ -30,6 +30,10 @@ interface PreviewPaneProps {
   lastCommitSha?: string | null
   /** Sandbox lifecycle state for the status dot. */
   sandboxState?: string
+  /** Whether the preview is currently rendered as a fullscreen overlay. */
+  expanded?: boolean
+  /** Toggle fullscreen. Button only renders when this is provided. */
+  onToggleExpand?: () => void
 }
 
 export function PreviewPane({
@@ -41,20 +45,43 @@ export function PreviewPane({
   onViewportChange,
   lastCommitSha,
   sandboxState,
+  expanded = false,
+  onToggleExpand,
 }: PreviewPaneProps) {
   // Explicit body height is load-bearing: `h-full` inside children
   // resolves against the nearest ancestor with a concrete height. `svh`
   // (small-viewport-height) so mobile-browser chrome doesn't crop the
   // iframe; `min-h-[520px]` is the floor for short viewports.
-  const bodyHeight = 'h-[calc(100svh-9rem)] min-h-[520px]'
+  // Fullscreen uses the full viewport minus the pane's own header/footer
+  // strip (~5rem) instead of the page-chrome offset.
+  const bodyHeight = expanded
+    ? 'h-[calc(100svh-5rem)]'
+    : 'h-[calc(100svh-9rem)] min-h-[520px]'
 
   return (
     <div className="flex flex-col gap-3 min-h-0">
       <div className="flex items-center gap-3">
         <ViewportToggle value={viewport} onChange={onViewportChange} />
-        <div className="ml-auto text-[11px] font-mono text-slate-400 truncate">
+        <div className="flex-1 min-w-0 text-[11px] font-mono text-slate-400 truncate text-right">
           {title}
         </div>
+        {onToggleExpand && (
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            aria-label={
+              expanded ? 'Exit fullscreen preview' : 'Expand preview to fullscreen'
+            }
+            title={expanded ? 'Exit fullscreen (Esc)' : 'Expand preview'}
+            className="hidden lg:inline-flex flex-none h-7 w-7 items-center justify-center rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-50 hover:bg-slate-800 transition-colors"
+          >
+            {expanded ? (
+              <Minimize2 className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
       </div>
 
       {viewport === 'desktop' ? (
