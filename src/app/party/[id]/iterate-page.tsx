@@ -108,6 +108,14 @@ export function IteratePage({
     ? `/api/preview/${encodePreviewTarget(previewUrl, previewToken)}/`
     : null
 
+  // Auto-collapse if the preview disappears mid-fullscreen (sandbox
+  // terminated, agent cleared URL). Without this, PreviewPane unmounts —
+  // taking the collapse button with it — and the fixed overlay would
+  // render only the fallback text with no visible affordance to exit.
+  useEffect(() => {
+    if (!previewSrc && expanded) setExpanded(false)
+  }, [previewSrc, expanded])
+
   const chatDisabled =
     sandboxState === 'PAUSED' ||
     sandboxState === 'TERMINATED' ||
