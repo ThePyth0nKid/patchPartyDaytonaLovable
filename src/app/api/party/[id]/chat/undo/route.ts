@@ -35,6 +35,7 @@ import { requireCsrfHeader } from '@/lib/csrf'
 import { getFallbackOctokit, getOctokitFor } from '@/lib/github'
 import { setupGitAskpass, tokenlessGitHubRemote } from '@/lib/git-askpass'
 import { MAX_TURNS_PER_PARTY } from '@/lib/chat-constants'
+import { checkChatRateLimit } from '@/lib/rate-limit'
 import { log } from '@/lib/log'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +63,25 @@ export async function POST(
   }
   const csrf = requireCsrfHeader(req)
   if (csrf) return csrf
+
+  // Share the /chat sliding window (4/60s per user): /undo also triggers
+  // a sandbox round-trip plus a GitHub push, and a user who is rate-
+  // limited on /chat shouldn't be able to hammer /undo as an escape
+  // hatch. Operationally: 4 chat-iterate actions — any mix of sends and
+  // undos — per 60s per user.
+  const rl = await checkChatRateLimit(session.user.id)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        error: `Too many requests. Try again in ${rl.retryAfterSeconds}s.`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+      },
+    )
+  }
 
   const { id } = await ctx.params
 
@@ -177,8 +197,15 @@ export async function POST(
         } as const
       }
 
+      // Strict `>` (not `>=`) so a party that hit the cap by normal chatting
+      // can still undo its last turn. The synthetic revert row then pushes
+      // the party permanently above the cap — accepted trade-off so undo
+      // stays reachable when it's most useful. T4.1 will refactor the
+      // cap arithmetic to stop counting 'undone' / 'failed' rows at all;
+      // until then, this single-site relaxation unblocks the 20-turn edge
+      // case.
       const existingTurns = await tx.chatTurn.count({ where: { partyId: id } })
-      if (existingTurns >= MAX_TURNS_PER_PARTY) {
+      if (existingTurns > MAX_TURNS_PER_PARTY) {
         return {
           ok: false,
           status: 409,
@@ -225,7 +252,18 @@ export async function POST(
     return NextResponse.json({ error: 'invalid target sha' }, { status: 500 })
   }
 
+  // Branch name guard — defense in depth. agent.branchName is server-
+  // generated today (patchparty/{persona}/{partyId8}) so this regex should
+  // always pass, but if a future change ever lets the name flow from user
+  // input or an issue title, the guard prevents shell metacharacters from
+  // reaching the `git push` command line.
+  if (!/^[a-zA-Z0-9._/-]+$/.test(agent.branchName)) {
+    await markSyntheticFailed(reservation.revertTurnId, 'invalid branch name')
+    return NextResponse.json({ error: 'invalid branch name' }, { status: 500 })
+  }
+
   let revertSha: string
+  let publicErrMsg = 'Revert failed — see server logs.'
   try {
     revertSha = await revertInSandbox(
       agent.sandboxId,
@@ -241,9 +279,16 @@ export async function POST(
       targetSha: reservation.targetSha,
       error: errMsg,
     })
+    // Only forward known-safe messages to the client. revertInSandbox raises
+    // UserSafeError for the one message we've vetted (conflict). Anything
+    // else could embed raw git stdout/stderr (filesystem paths, file lines,
+    // conflict markers) so we collapse it to a generic string.
+    if (error instanceof UserSafeError) {
+      publicErrMsg = error.message
+    }
     await markSyntheticFailed(reservation.revertTurnId, errMsg)
     return NextResponse.json(
-      { error: `Revert failed: ${errMsg}` },
+      { error: publicErrMsg },
       { status: 502 },
     )
   }
@@ -273,13 +318,44 @@ export async function POST(
       }),
     ])
   } catch (error: unknown) {
-    // We already pushed the revert to GitHub, so the branch and sandbox are
-    // consistent even if the DB write blew up. Surface the error loudly.
+    // Split-tx pitfall: the revert commit is already on GitHub (we pushed
+    // before entering this block) but the DB finalise failed. If we leave
+    // the original turn as 'applied', reload surfaces the Undo button
+    // again and a second undo would revert-the-revert. Tombstone the
+    // synthetic row so it doesn't leave a stuck 'pending' either.
     log.error('chat.undo finalise failed', {
       partyId: id,
       revertSha,
       error: String(error),
     })
+    await markSyntheticFailed(
+      reservation.revertTurnId,
+      'finalise tx failed after push',
+    )
+    // Best-effort: also mark the original 'undone' so reload doesn't offer
+    // Undo a second time and trigger revert-the-revert. This write is
+    // independent from the synthetic row so Prisma shouldn't retry-storm
+    // on the same failure mode.
+    try {
+      await prisma.chatTurn.updateMany({
+        where: {
+          partyId: id,
+          turnIndex: requestedTurnIndex,
+          status: 'applied',
+          revertedByTurnIndex: null,
+        },
+        data: {
+          status: 'undone',
+          revertedByTurnIndex: reservation.revertTurnIndex,
+        },
+      })
+    } catch (fallbackError: unknown) {
+      log.error('chat.undo best-effort tombstone failed', {
+        partyId: id,
+        turnIndex: requestedTurnIndex,
+        error: String(fallbackError),
+      })
+    }
     return NextResponse.json(
       {
         error:
@@ -320,6 +396,12 @@ async function markSyntheticFailed(
   }
 }
 
+// Thrown by revertInSandbox when the error message is safe to forward to
+// the end user. Anything else is collapsed to a generic string by the
+// caller so raw git stderr — which can include filesystem paths, file
+// content, or conflict markers — never reaches the client body.
+class UserSafeError extends Error {}
+
 async function revertInSandbox(
   sandboxId: string,
   branch: string,
@@ -330,11 +412,12 @@ async function revertInSandbox(
   const sandbox = await new Daytona().get(sandboxId)
 
   // `git revert --no-edit` creates a new commit that inverts targetSha.
-  // Using -m 1 makes it safe even if targetSha were a merge commit
-  // (picks the first parent as the mainline — any turn commit is a
-  // straight-line commit so -m 1 is a no-op for those, but costs nothing).
+  // We deliberately do NOT pass `-m 1` — it is harmless on straight-line
+  // commits in Git ≥ 2.25 but was an error ("Mainline was specified but
+  // commit is not a merge") on older versions. All chat-turn commits are
+  // straight-line, so `-m` is unnecessary either way.
   const revertExec = await sandbox.process.executeCommand(
-    `cd ${REPO_DIR} && git -c user.email=chat@patchparty.dev -c user.name="PatchParty Chat" revert --no-edit -m 1 ${targetSha}`,
+    `cd ${REPO_DIR} && git -c user.email=chat@patchparty.dev -c user.name="PatchParty Chat" revert --no-edit ${targetSha}`,
   )
   const revertOut = revertExec.result ?? ''
   if (revertExec.exitCode !== undefined && revertExec.exitCode !== 0) {
@@ -346,19 +429,21 @@ async function revertInSandbox(
         /* best-effort cleanup */
       })
     if (revertOut.toLowerCase().includes('conflict')) {
-      throw new Error(
+      throw new UserSafeError(
         'Revert conflicts with a later change — resolve or restart the party.',
       )
     }
+    // Keep full stdout/stderr in logs only — see UserSafeError docstring.
     throw new Error(`git revert failed: ${revertOut.slice(0, 200)}`)
   }
 
   // Push the new revert commit. Never force — revert is additive.
+  // branch is regex-guarded by the caller; double-quoting belt+braces.
   const askpass = await setupGitAskpass(sandbox, userToken)
   try {
     const remote = tokenlessGitHubRemote(party.repoOwner, party.repoName)
     await sandbox.process.executeCommand(
-      `cd ${REPO_DIR} && ${askpass.envPrefix} git -c credential.helper= push "${remote}" HEAD:${branch}`,
+      `cd ${REPO_DIR} && ${askpass.envPrefix} git -c credential.helper= push "${remote}" HEAD:"${branch}"`,
     )
   } finally {
     await askpass.cleanup()
