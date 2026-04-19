@@ -29,6 +29,7 @@ export default async function NewPartyPage() {
         <NewPartyWizard
           remaining={usage.remaining}
           dailyLimit={DAILY_PARTY_LIMIT}
+          unlimited={usage.unlimited}
         />
       </section>
     </AppShell>

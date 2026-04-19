@@ -85,16 +85,22 @@ export default async function DashboardPage() {
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-4xl font-semibold tracking-tight">{usage.partiesToday}</span>
-              <span className="text-slate-500">/ {DAILY_PARTY_LIMIT}</span>
+              <span className="text-slate-500">
+                / {usage.unlimited ? '∞' : DAILY_PARTY_LIMIT}
+              </span>
             </div>
             <p className="mt-2 text-[12px] text-slate-400">
-              Free tier: {DAILY_PARTY_LIMIT} parties / 24h. Resets every midnight UTC.
+              {usage.unlimited
+                ? 'Maintainer · no cap.'
+                : `Free tier: ${DAILY_PARTY_LIMIT} parties / 24h. Resets every midnight UTC.`}
             </p>
             <div className="mt-4 h-1 w-full bg-slate-800/80 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-[#14B8A6] to-[#60A5FA]"
                 style={{
-                  width: `${Math.min(100, (usage.partiesToday / DAILY_PARTY_LIMIT) * 100)}%`,
+                  width: usage.unlimited
+                    ? '100%'
+                    : `${Math.min(100, (usage.partiesToday / DAILY_PARTY_LIMIT) * 100)}%`,
                 }}
               />
             </div>

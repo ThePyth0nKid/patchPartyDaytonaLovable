@@ -24,9 +24,14 @@ type Step = 'repo' | 'issue' | 'confirm'
 interface WizardProps {
   remaining: number
   dailyLimit: number
+  unlimited?: boolean
 }
 
-export function NewPartyWizard({ remaining, dailyLimit }: WizardProps) {
+export function NewPartyWizard({
+  remaining,
+  dailyLimit,
+  unlimited = false,
+}: WizardProps) {
   const [step, setStep] = useState<Step>('repo')
   const [repo, setRepo] = useState<RepoSummary | null>(null)
   const [issue, setIssue] = useState<IssueSummary | null>(null)
@@ -63,6 +68,7 @@ export function NewPartyWizard({ remaining, dailyLimit }: WizardProps) {
             issue={issue}
             remaining={remaining}
             dailyLimit={dailyLimit}
+            unlimited={unlimited}
             onBack={() => setStep('issue')}
           />
         )}
@@ -473,19 +479,21 @@ function ConfirmStep({
   issue,
   remaining,
   dailyLimit,
+  unlimited,
   onBack,
 }: {
   repo: RepoSummary
   issue: IssueSummary
   remaining: number
   dailyLimit: number
+  unlimited: boolean
   onBack: () => void
 }) {
   const router = useRouter()
   const [launching, setLaunching] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const overLimit = remaining <= 0
+  const overLimit = !unlimited && remaining <= 0
 
   async function handleLaunch() {
     setLaunching(true)
@@ -521,7 +529,13 @@ function ConfirmStep({
           Change issue
         </button>
         <div className="text-[12px] font-mono text-slate-400">
-          {remaining} / {dailyLimit} parties left today
+          {unlimited ? (
+            <span className="text-[#14B8A6]">∞ maintainer · no cap</span>
+          ) : (
+            <>
+              {remaining} / {dailyLimit} parties left today
+            </>
+          )}
         </div>
       </div>
 
