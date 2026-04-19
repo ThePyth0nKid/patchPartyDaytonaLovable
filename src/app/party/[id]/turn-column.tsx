@@ -349,10 +349,14 @@ export function TurnColumn({
           <span
             aria-label={`${turnCountUsed} of ${MAX_TURNS_PER_PARTY} turns used, ${formatCostUsd(totalCostUsd)} spent`}
           >
-            {turnCountUsed}/{MAX_TURNS_PER_PARTY}
-            <span className="text-slate-500 normal-case tracking-normal">
-              {' · '}
-              {formatCostUsd(totalCostUsd)} total
+            {/* aria-hidden on the visible children so screen readers use the
+                cleaner aria-label and don't double-announce the glyphs. */}
+            <span aria-hidden="true">
+              {turnCountUsed}/{MAX_TURNS_PER_PARTY}
+              <span className="text-slate-500 normal-case tracking-normal">
+                {' · '}
+                {formatCostUsd(totalCostUsd)} total
+              </span>
             </span>
           </span>
           {onShipPR && (

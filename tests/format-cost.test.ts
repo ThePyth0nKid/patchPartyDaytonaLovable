@@ -32,3 +32,17 @@ test('≥10¢ renders with 2 decimals (standard dollar format)', () => {
   assert.equal(formatCostUsd(1.2345), '$1.23')
   assert.equal(formatCostUsd(42), '$42.00')
 })
+
+test('runaway / malformed values clamp to >$999,999', () => {
+  assert.equal(formatCostUsd(1_000_000), '>$999,999')
+  assert.equal(formatCostUsd(1e15), '>$999,999')
+  // Infinity is already blocked by the !isFinite check, but verify.
+  assert.equal(formatCostUsd(Infinity), '$0.00')
+})
+
+test('extremely small positive values render as $0.0000 (accepted rounding)', () => {
+  // 1e-10 × toFixed(4) = "0.0000". Acceptable: sub-$0.00005 is effectively
+  // zero for the meter, so the user sees $0.0000 until the running sum
+  // hits measurable territory.
+  assert.equal(formatCostUsd(1e-10), '$0.0000')
+})
