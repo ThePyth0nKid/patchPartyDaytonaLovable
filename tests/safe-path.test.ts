@@ -136,6 +136,30 @@ test('rejects AWS credentials and .netrc', () => {
   assert.equal(checkSandboxPath(ROOT, '.netrc').reason, 'secret')
 })
 
+// ---------- Windows-style separator edge cases ----------
+// Linux sandboxes (Daytona) treat `\` as a literal filename character,
+// but we still defend against models emitting `.\.env` or `sub\.env` to
+// try to slip past a sloppy pattern match. The secret-check converts
+// backslashes to forward slashes before splitting into segments.
+
+test('rejects dot-backslash .env (no repo escape, but still a secret)', () => {
+  const r = checkSandboxPath(ROOT, '.\\.env')
+  assert.equal(r.ok, false, 'expected .\\.env to be rejected')
+  assert.equal(r.reason, 'secret')
+})
+
+test('rejects sub\\.env.production', () => {
+  const r = checkSandboxPath(ROOT, 'sub\\.env.production')
+  assert.equal(r.ok, false, 'expected sub\\.env.production to be rejected')
+  assert.equal(r.reason, 'secret')
+})
+
+test('rejects nested\\path\\to\\id_rsa', () => {
+  const r = checkSandboxPath(ROOT, 'nested\\path\\to\\id_rsa')
+  assert.equal(r.ok, false, 'expected nested\\path\\to\\id_rsa to be rejected')
+  assert.equal(r.reason, 'secret')
+})
+
 // ---------- safeSandboxPath thin-wrapper shape ----------
 
 test('safeSandboxPath returns resolved path on accept, null on reject', () => {

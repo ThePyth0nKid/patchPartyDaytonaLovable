@@ -15,8 +15,6 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const csrf = requireCsrfHeader(req)
-  if (csrf) return csrf
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json(
@@ -24,6 +22,8 @@ export async function POST(
       { status: 401 },
     )
   }
+  const csrf = requireCsrfHeader(req)
+  if (csrf) return csrf
 
   const { id } = await params
   const parsed = await parseBody(req, PickPatchSchema)
