@@ -134,3 +134,35 @@ test('a never-committed pending undo row still does not count if the original tu
   ]
   assert.equal(countChargeableTurns(rows), 0)
 })
+
+test('synthetic revert row that itself fails is also net-zero', () => {
+  // Defence-in-depth edge: the revert git operation crashed after the
+  // synthetic row was created. The synthetic becomes 'failed' (free by
+  // the status filter) and the original stays 'applied' with
+  // revertedByTurnIndex still set to the failed synthetic's turnIndex.
+  // Outcome: the original still counts (user's work isn't undone), the
+  // failed synthetic doesn't count. This locks in the invariant that the
+  // two exclusion paths (status filter vs revert-target set) compose
+  // correctly regardless of which hits first.
+  const rows = [
+    { turnIndex: 0, status: 'applied', revertedByTurnIndex: 1 },
+    { turnIndex: 1, status: 'failed', revertedByTurnIndex: null },
+  ]
+  // Original is applied, chargeable. Synthetic is failed, not chargeable.
+  // revertedByTurnIndex on the original references turn 1 — but turn 1's
+  // status filter would exclude it anyway. Order-independent: 1.
+  assert.equal(countChargeableTurns(rows), 1)
+})
+
+test('unknown status strings are treated as non-chargeable (safe-by-default)', () => {
+  // Forward-compat: if a migration someday introduces a new status
+  // (e.g. 'archived'), the helper must not silently upgrade it to
+  // chargeable. Equality checks against the two known-chargeable values
+  // keep this safe.
+  const rows = [
+    { turnIndex: 0, status: 'applied', revertedByTurnIndex: null },
+    { turnIndex: 1, status: 'archived', revertedByTurnIndex: null },
+    { turnIndex: 2, status: 'APPLIED', revertedByTurnIndex: null }, // typo
+  ]
+  assert.equal(countChargeableTurns(rows), 1)
+})

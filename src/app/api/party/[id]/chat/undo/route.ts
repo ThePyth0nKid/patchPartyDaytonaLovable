@@ -34,6 +34,7 @@ import { prisma } from '@/lib/prisma'
 import { requireCsrfHeader } from '@/lib/csrf'
 import { getFallbackOctokit, getOctokitFor } from '@/lib/github'
 import { setupGitAskpass, tokenlessGitHubRemote } from '@/lib/git-askpass'
+import { MAX_TOTAL_TURNS_PER_PARTY } from '@/lib/chat-constants'
 import { checkChatRateLimit } from '@/lib/rate-limit'
 import { log } from '@/lib/log'
 
@@ -197,14 +198,26 @@ export async function POST(
       }
 
       // T4.1: the T3.4 `> MAX_TURNS_PER_PARTY` hack is gone. Undo no longer
-      // counts against the cap at all — once the revert commits, the original
-      // turn becomes 'undone' (not chargeable) and the synthetic becomes a
-      // revert target (also not chargeable), so the post-commit delta is
-      // strictly negative. We keep a paranoia guard that the row count isn't
-      // already past the unique-index ceiling the DB can represent, then use
-      // the total row count for the next turnIndex. /chat is the only caller
+      // counts against the user-facing chargeable cap — once the revert
+      // commits, the original turn becomes 'undone' (not chargeable) and the
+      // synthetic becomes a revert target (also not chargeable), so the
+      // post-commit delta is strictly negative. /chat is the only caller
       // that enforces the chargeable cap.
+      //
+      // We DO enforce an absolute row ceiling (T4.1 follow-up — closes a
+      // storage-DoS amplification flagged by security-reviewer on c10e568).
+      // An attacker cycling chat+undo grows the ChatTurn table net-+2 rows
+      // per cycle with zero chargeable cost; MAX_TOTAL_TURNS_PER_PARTY caps
+      // the damage at O(1) rows per party regardless of how clever the
+      // cycling pattern is.
       const existingTurns = await tx.chatTurn.count({ where: { partyId: id } })
+      if (existingTurns >= MAX_TOTAL_TURNS_PER_PARTY) {
+        return {
+          ok: false,
+          status: 409,
+          error: 'Party row limit reached. Ship the PR to finalize.',
+        } as const
+      }
 
       const row = await tx.chatTurn.create({
         data: {

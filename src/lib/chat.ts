@@ -52,6 +52,8 @@ function getDaytona(): Daytona {
 export { MAX_TURNS_PER_PARTY } from './chat-constants'
 import {
   MAX_TURNS_PER_PARTY,
+  MAX_TOTAL_TURNS_PER_PARTY,
+  MAX_FAILED_TURNS_PER_PARTY,
   countChargeableTurns,
 } from './chat-constants'
 export const TOOL_LOOP_CAP = 8
@@ -353,10 +355,13 @@ async function reserveTurnSlot(
         })
 
         // T4.1: cap is enforced against the *chargeable* count (excludes
-        // failed + undone + synthetic revert rows). `total` is still used
-        // to allocate the next turnIndex — the unique (partyId, turnIndex)
+        // failed + undone + synthetic revert rows). `rows.length` is used
+        // as the next turnIndex — the unique (partyId, turnIndex)
         // constraint needs a monotonically increasing integer across all
-        // rows, not just chargeable ones.
+        // rows, not just chargeable ones. `findMany` inside the same tx
+        // sees the post-reap snapshot (updateMany above flipped stale
+        // pending rows to 'failed' but didn't delete them — count stays
+        // correct).
         const rows = await tx.chatTurn.findMany({
           where: { partyId },
           select: {
@@ -365,16 +370,34 @@ async function reserveTurnSlot(
             revertedByTurnIndex: true,
           },
         })
+
+        // Absolute row ceiling (T4.1 follow-up — closes an amplification
+        // vector flagged by security-reviewer on c10e568): an attacker
+        // cycling chat+undo grows the table net-+2 rows per pair with no
+        // chargeable cost. Bound the total so storage stays O(1) per party.
+        if (rows.length >= MAX_TOTAL_TURNS_PER_PARTY) {
+          return { kind: 'cap_reached' as const }
+        }
+
+        // Failed-turn ceiling (same follow-up): failed rows are free
+        // against the chargeable cap, but each one burned Anthropic +
+        // Daytona before it failed. A prompt that reliably provokes a
+        // tool error would otherwise run indefinitely under the 4/60s
+        // rate limit. Count once via the snapshot we already fetched.
+        const failedCount = rows.filter((r) => r.status === 'failed').length
+        if (failedCount >= MAX_FAILED_TURNS_PER_PARTY) {
+          return { kind: 'cap_reached' as const }
+        }
+
         const chargeable = countChargeableTurns(rows)
         if (chargeable >= MAX_TURNS_PER_PARTY) {
           return { kind: 'cap_reached' as const }
         }
 
         // On retry, skip past already-claimed indices by offsetting from
-        // the total row count + attempt. The Prisma client sees its own
-        // count within the tx, but a row inserted by a previous failed
-        // attempt (outside this tx) would still live in the table — hence
-        // the bump.
+        // the total row count + attempt. A row inserted by a previous
+        // failed attempt (outside this tx) would still live in the
+        // table — hence the bump.
         const turnIndex = rows.length + attempt
         const row = await tx.chatTurn.create({
           data: {
