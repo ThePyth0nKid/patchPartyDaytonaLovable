@@ -50,7 +50,10 @@ function getDaytona(): Daytona {
 }
 
 export { MAX_TURNS_PER_PARTY } from './chat-constants'
-import { MAX_TURNS_PER_PARTY } from './chat-constants'
+import {
+  MAX_TURNS_PER_PARTY,
+  countChargeableTurns,
+} from './chat-constants'
 export const TOOL_LOOP_CAP = 8
 export const TURN_TIMEOUT_MS = 120_000
 export const MAX_EDIT_LINES = 500
@@ -349,16 +352,30 @@ async function reserveTurnSlot(
           data: { status: 'failed', error: 'stale pending reaped' },
         })
 
-        const existingTurns = await tx.chatTurn.count({ where: { partyId } })
-        if (existingTurns >= MAX_TURNS_PER_PARTY) {
+        // T4.1: cap is enforced against the *chargeable* count (excludes
+        // failed + undone + synthetic revert rows). `total` is still used
+        // to allocate the next turnIndex — the unique (partyId, turnIndex)
+        // constraint needs a monotonically increasing integer across all
+        // rows, not just chargeable ones.
+        const rows = await tx.chatTurn.findMany({
+          where: { partyId },
+          select: {
+            turnIndex: true,
+            status: true,
+            revertedByTurnIndex: true,
+          },
+        })
+        const chargeable = countChargeableTurns(rows)
+        if (chargeable >= MAX_TURNS_PER_PARTY) {
           return { kind: 'cap_reached' as const }
         }
 
         // On retry, skip past already-claimed indices by offsetting from
-        // existingTurns + attempt. The Prisma client sees its own count
-        // within the tx, but a row inserted by a previous failed attempt
-        // (outside this tx) would still live in the table — hence the bump.
-        const turnIndex = existingTurns + attempt
+        // the total row count + attempt. The Prisma client sees its own
+        // count within the tx, but a row inserted by a previous failed
+        // attempt (outside this tx) would still live in the table — hence
+        // the bump.
+        const turnIndex = rows.length + attempt
         const row = await tx.chatTurn.create({
           data: {
             partyId,

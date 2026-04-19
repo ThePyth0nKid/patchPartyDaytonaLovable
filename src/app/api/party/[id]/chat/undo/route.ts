@@ -34,7 +34,6 @@ import { prisma } from '@/lib/prisma'
 import { requireCsrfHeader } from '@/lib/csrf'
 import { getFallbackOctokit, getOctokitFor } from '@/lib/github'
 import { setupGitAskpass, tokenlessGitHubRemote } from '@/lib/git-askpass'
-import { MAX_TURNS_PER_PARTY } from '@/lib/chat-constants'
 import { checkChatRateLimit } from '@/lib/rate-limit'
 import { log } from '@/lib/log'
 
@@ -197,21 +196,15 @@ export async function POST(
         } as const
       }
 
-      // Strict `>` (not `>=`) so a party that hit the cap by normal chatting
-      // can still undo its last turn. The synthetic revert row then pushes
-      // the party permanently above the cap — accepted trade-off so undo
-      // stays reachable when it's most useful. T4.1 will refactor the
-      // cap arithmetic to stop counting 'undone' / 'failed' rows at all;
-      // until then, this single-site relaxation unblocks the 20-turn edge
-      // case.
+      // T4.1: the T3.4 `> MAX_TURNS_PER_PARTY` hack is gone. Undo no longer
+      // counts against the cap at all — once the revert commits, the original
+      // turn becomes 'undone' (not chargeable) and the synthetic becomes a
+      // revert target (also not chargeable), so the post-commit delta is
+      // strictly negative. We keep a paranoia guard that the row count isn't
+      // already past the unique-index ceiling the DB can represent, then use
+      // the total row count for the next turnIndex. /chat is the only caller
+      // that enforces the chargeable cap.
       const existingTurns = await tx.chatTurn.count({ where: { partyId: id } })
-      if (existingTurns > MAX_TURNS_PER_PARTY) {
-        return {
-          ok: false,
-          status: 409,
-          error: 'Chat session limit reached. Ship the PR to finalize.',
-        } as const
-      }
 
       const row = await tx.chatTurn.create({
         data: {

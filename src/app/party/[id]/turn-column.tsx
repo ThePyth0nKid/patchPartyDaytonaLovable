@@ -12,7 +12,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FileDiffStat } from '@/lib/diff-stats'
 import { csrfFetch } from '@/lib/client-fetch'
-import { MAX_TURNS_PER_PARTY } from '@/lib/chat-constants'
+import {
+  MAX_TURNS_PER_PARTY,
+  countChargeableTurns,
+} from '@/lib/chat-constants'
 import { TurnCard, type TurnCardData } from './turn-card'
 import { DiffDrawer } from './diff-drawer'
 import { InputDock } from './input-dock'
@@ -110,8 +113,18 @@ export function TurnColumn({
     el.scrollTop = el.scrollHeight
   }, [turns])
 
+  // T4.1: mirror the server's `countChargeableTurns` so the displayed
+  // "N/20" counter matches the cap the server will actually enforce.
+  // Failed + undone + synthetic-revert turns are all excluded.
   const turnCountUsed = useMemo(
-    () => turns.filter((t) => t.status === 'applied' || t.status === 'pending').length,
+    () =>
+      countChargeableTurns(
+        turns.map((t) => ({
+          turnIndex: t.turnIndex,
+          status: t.status,
+          revertedByTurnIndex: t.revertedByTurnIndex,
+        })),
+      ),
     [turns],
   )
   const atTurnCap = turnCountUsed >= MAX_TURNS_PER_PARTY
