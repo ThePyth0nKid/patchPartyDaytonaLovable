@@ -1,0 +1,41 @@
+name: sandbox-lifecycle-cron
+
+# Sweeps PatchParty's sandbox state machine once per minute:
+#   ACTIVE → IDLE_WARN (10m) → PAUSED (15m) → TERMINATED (7d).
+# Without this loop, paused-but-not-terminated Daytona sandboxes
+# accrue per-second costs indefinitely.
+
+on:
+  schedule:
+    - cron: '* * * * *'   # every minute
+  workflow_dispatch:       # manual trigger for ad-hoc sweep
+
+concurrency:
+  group: sandbox-lifecycle-cron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: ping /api/cron/sandbox-lifecycle
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ENDPOINT: https://patchparty.dev/api/cron/sandbox-lifecycle
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret not set"
+            exit 1
+          fi
+          status=$(curl -sS -o /tmp/body -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -X POST "$ENDPOINT")
+          echo "HTTP $status"
+          cat /tmp/body
+          if [ "$status" != "200" ]; then
+            exit 1
+          fi
