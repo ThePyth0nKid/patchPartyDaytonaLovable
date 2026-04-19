@@ -74,6 +74,13 @@ export function TurnColumn({
   const [diffCache, setDiffCache] = useState<Map<string, DiffCache>>(
     () => new Map(),
   )
+  // Mirror diffCache in a ref so onOpenDiff can dedupe fetches without
+  // listing diffCache in its deps — which would memo-bust every TurnCard
+  // on every cache write. Ref stays in sync via the effect below.
+  const diffCacheRef = useRef(diffCache)
+  useEffect(() => {
+    diffCacheRef.current = diffCache
+  }, [diffCache])
 
   useEffect(() => {
     let aborted = false
@@ -194,7 +201,7 @@ export function TurnColumn({
     async (turnIndex: number, file: FileDiffStat) => {
       setOpenDiff({ turnIndex, file })
       const cacheKey = `${turnIndex}:${file.path}`
-      if (diffCache.has(cacheKey)) return
+      if (diffCacheRef.current.has(cacheKey)) return
       setDiffCache((prev) => {
         const next = new Map(prev)
         next.set(cacheKey, {
@@ -244,7 +251,7 @@ export function TurnColumn({
         })
       }
     },
-    [diffCache, partyId],
+    [partyId],
   )
 
   const activeDiff = openDiff

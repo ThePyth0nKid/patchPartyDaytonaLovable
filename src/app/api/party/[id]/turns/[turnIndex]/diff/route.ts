@@ -85,9 +85,15 @@ export async function GET(
 
   // Resolve the relative path against the diffStats the turn recorded.
   // This prevents reading a file that *happens* to exist at that path but
-  // was not touched by the turn (defence in depth on top of checkSandboxPath).
+  // was not touched by the turn. We reject when `touchedPaths` is empty —
+  // either the turn never committed anything (no diff to show) or the
+  // diffStats column hasn't been written yet; either way the client has
+  // no business asking for a specific path. Without this stricter check,
+  // any authenticated party owner could probe arbitrary sandbox files
+  // under REPO_DIR (bounded by checkSandboxPath's secrets deny-list but
+  // still broader than this turn's actual changes).
   const touchedPaths = asPathArray(turn.diffStats)
-  if (touchedPaths.length > 0 && !touchedPaths.includes(rawPath)) {
+  if (touchedPaths.length === 0 || !touchedPaths.includes(rawPath)) {
     return NextResponse.json(
       { error: 'path not in turn diff' },
       { status: 404 },
@@ -170,15 +176,22 @@ async function tryDiffFromSandbox(
   if (!agent?.sandboxId) return null
 
   // git show <sha> -- <path> prints a clean `diff --git` header followed by
-  // the unified diff. Pipe through base64 on the client side would be nice
-  // but executeCommand already returns a plain string.
+  // the unified diff.
   //
-  // Arguments are well-formed (hex SHA + path that we validated above), so
-  // string-interpolation into the shell command is safe here — the real
-  // adversarial surface is `path`, which checkSandboxPath already rejected
-  // anything suspicious.
+  // Shell safety: the path is wrapped in double quotes in the command below,
+  // so the only POSIX double-quote expansion metacharacters we must block
+  // are `$`, backtick, `"`, and `\`. Newline + tab + control chars (0x00-
+  // 0x1f) cannot reach a valid repo file anyway and would create ambiguous
+  // command-line layouts, so we reject them too. We do NOT need to block
+  // `;`, `|`, `&`, single-quote, or spaces — those are inert inside double
+  // quotes. If you ever switch this to execFile or drop the double-quote
+  // wrapping, re-audit the allowlist.
+  //
+  // The SHA regex is separate: git accepts any hex prefix as a ref, so a
+  // strict `[a-f0-9]{7,64}` guard forecloses on ref-injection tricks like
+  // `HEAD` or refspec strings.
   if (!/^[a-f0-9]{7,64}$/.test(sha)) return null
-  if (/[`"$\\\n]/.test(relPath)) return null
+  if (/[`"$\\\n\t\r\x00-\x1f]/.test(relPath)) return null
 
   try {
     const sandbox = await new Daytona().get(agent.sandboxId)

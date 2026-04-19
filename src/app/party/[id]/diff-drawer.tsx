@@ -20,6 +20,10 @@
 import { useEffect, useRef } from 'react'
 import { X, Loader2 } from 'lucide-react'
 import { Highlight, themes } from 'prism-react-renderer'
+import { classify, type DiffLineKind } from './diff-classify'
+
+export { classify }
+export type { DiffLineKind }
 
 interface DiffDrawerProps {
   open: boolean
@@ -202,14 +206,3 @@ function DiffLine({ line }: { line: string }) {
   )
 }
 
-type LineKind = 'added' | 'removed' | 'hunk' | 'meta' | 'context'
-
-function classify(line: string): LineKind {
-  if (line.startsWith('+++') || line.startsWith('---')) return 'meta'
-  if (line.startsWith('diff --git')) return 'meta'
-  if (line.startsWith('index ')) return 'meta'
-  if (line.startsWith('@@')) return 'hunk'
-  if (line.startsWith('+')) return 'added'
-  if (line.startsWith('-')) return 'removed'
-  return 'context'
-}
