@@ -1,6 +1,8 @@
 // PatchParty — persistence schema
 // - Auth.js v5 tables: User, Account, Session, VerificationToken
 // - Domain:            Party, Agent, UsageCounter
+// - Telemetry / chat / BYOK (v2): PartyEvent, AgentMetric, PickDecision,
+//                                 ChatTurn, AnthropicKey + sandbox state on Party
 
 generator client {
   provider = "prisma-client-js"
@@ -14,19 +16,21 @@ datasource db {
 // ─── Auth.js v5 ──────────────────────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  githubLogin   String?   @unique
-  createdAt     DateTime  @default(now())
+  id               String    @id @default(cuid())
+  name             String?
+  email            String?   @unique
+  emailVerified    DateTime?
+  image            String?
+  githubLogin      String?   @unique
+  createdAt        DateTime  @default(now())
+  preferredKeyMode KeyMode   @default(MANAGED)
 
-  accounts    Account[]
-  sessions    Session[]
-  parties     Party[]
-  usage       UsageCounter?
-  activeRepos ActiveRepo[]
+  accounts     Account[]
+  sessions     Session[]
+  parties      Party[]
+  usage        UsageCounter?
+  activeRepos  ActiveRepo[]
+  anthropicKey AnthropicKey?
 }
 
 model Account {
@@ -73,49 +77,74 @@ enum PartyStatus {
   CANCELED
 }
 
-model Party {
-  id             String      @id
-  userId         String
-  issueUrl       String
-  issueTitle     String
-  issueBody      String      @db.Text
-  repoOwner      String
-  repoName       String
-  issueNumber    Int
-  classification Json?
-  status         PartyStatus @default(RUNNING)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  pickedPersona  String?
-  prUrl          String?
+enum KeyMode {
+  MANAGED
+  BYOK
+}
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  agents Agent[]
+enum SandboxState {
+  ACTIVE
+  IDLE_WARN
+  PAUSED
+  RESUMING
+  TERMINATED
+}
+
+model Party {
+  id                    String       @id
+  userId                String
+  issueUrl              String
+  issueTitle            String
+  issueBody             String       @db.Text
+  repoOwner             String
+  repoName              String
+  issueNumber           Int
+  classification        Json?
+  status                PartyStatus  @default(RUNNING)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  pickedPersona         String?
+  prUrl                 String?
+  chatSessionAgentId    String?
+  sandboxState          SandboxState @default(ACTIVE)
+  sandboxLastActivityAt DateTime?
+  sandboxPausedAt       DateTime?
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agents       Agent[]
+  events       PartyEvent[]
+  metrics      AgentMetric[]
+  pickDecision PickDecision?
+  chatTurns    ChatTurn[]
 
   @@index([userId, createdAt])
+  @@index([sandboxState, sandboxLastActivityAt])
 }
 
 model Agent {
-  id           String   @id @default(cuid())
-  partyId      String
-  personaId    String
-  status       String
-  stage        String?
-  message      String?
-  progress     Int      @default(0)
-  startedAt    DateTime @default(now())
-  finishedAt   DateTime?
-  branchName   String?
-  previewUrl   String?
-  previewToken String?  @db.Text
-  sandboxId    String?
-  summary      String?  @db.Text
-  files        Json?
-  stats        Json?
-  error        String?
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  partyId       String
+  personaId     String
+  status        String
+  stage         String?
+  message       String?
+  progress      Int       @default(0)
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  branchName    String?
+  previewUrl    String?
+  previewToken  String?   @db.Text
+  sandboxId     String?
+  summary       String?   @db.Text
+  files         Json?
+  stats         Json?
+  error         String?
+  updatedAt     DateTime  @updatedAt
+  schemaVersion Int       @default(1)
 
-  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  party  Party        @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  metric AgentMetric?
+  events PartyEvent[]
 
   @@unique([partyId, personaId])
   @@index([sandboxId])
@@ -145,6 +174,95 @@ model UsageCounter {
   partiesToday Int      @default(0)
   partiesTotal Int      @default(0)
   dayStart     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Telemetry / chat / BYOK (v2) ────────────────────────────────────────────
+
+model PartyEvent {
+  id        BigInt   @id @default(autoincrement())
+  partyId   String
+  agentId   String?
+  type      String
+  traceId   String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  party Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  agent Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([partyId, createdAt])
+  @@index([traceId])
+  @@index([type, createdAt])
+}
+
+model AgentMetric {
+  id                String   @id @default(cuid())
+  agentId           String   @unique
+  partyId           String
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  cacheReadTokens   Int      @default(0)
+  cacheCreateTokens Int      @default(0)
+  latencyMs         Int      @default(0)
+  sandboxTimeMs     Int      @default(0)
+  toolCalls         Json?
+  costUsd           Decimal  @default(0) @db.Decimal(10, 4)
+  createdAt         DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([partyId])
+  @@index([createdAt])
+}
+
+model PickDecision {
+  id             String   @id @default(cuid())
+  partyId        String   @unique
+  pickedAgentId  String
+  reasonText     String?
+  comparedAgents String[]
+  createdAt      DateTime @default(now())
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+}
+
+model ChatTurn {
+  id                String   @id @default(cuid())
+  partyId           String
+  turnIndex         Int
+  userMessage       String
+  assistantResponse String?
+  toolCalls         Json?
+  diffApplied       String[]
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  cacheReadTokens   Int      @default(0)
+  cacheCreateTokens Int      @default(0)
+  latencyMs         Int      @default(0)
+  costUsd           Decimal  @default(0) @db.Decimal(10, 4)
+  status            String
+  error             String?
+  createdAt         DateTime @default(now())
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@unique([partyId, turnIndex])
+  @@index([partyId, createdAt])
+}
+
+model AnthropicKey {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  encryptedKey   Bytes
+  keyFingerprint String
+  validatedAt    DateTime
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
