@@ -20,6 +20,11 @@ import { CheckCircle2, ExternalLink, X, Loader2 } from 'lucide-react'
 import type { PersonaId } from '@/lib/personas'
 import { csrfFetch } from '@/lib/client-fetch'
 import { SHIP_BODY_MAX_LEN } from '@/lib/ship-body'
+import {
+  clearShipDraft,
+  loadShipDraft,
+  saveShipDraft,
+} from '@/lib/ship-draft'
 
 // Selector matching focusable elements inside the modal — used by the focus
 // trap. Standard WAI-ARIA dialog pattern: keep Tab / Shift-Tab cycling
@@ -68,14 +73,25 @@ export function ShipSheet({
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
 
-  // Load preview on first open. If the user closes and reopens, we keep the
-  // in-memory draft (T4.3 will add localStorage persistence).
+  // Load preview on first open. T4.3: if a localStorage draft exists for
+  // this party, it takes precedence over the server-generated preview
+  // title/body/type — the user's in-flight edits survive tab close /
+  // reopen. The preview files list is always used from the server
+  // (not persisted — it's derivable).
   useEffect(() => {
     if (!open) return
     if (preview) return
     let aborted = false
     setLoadingPreview(true)
     setPreviewError(null)
+
+    const draft = loadShipDraft(partyId)
+    if (draft) {
+      setTitle(draft.title)
+      setBody(draft.body)
+      setType(draft.type)
+    }
+
     ;(async () => {
       try {
         const res = await fetch(`/api/party/${partyId}/ship/preview`, {
@@ -90,9 +106,13 @@ export function ShipSheet({
         const data = (await res.json()) as ShipPreview
         if (aborted) return
         setPreview(data)
-        setTitle(data.title)
-        setBody(data.body)
-        setType(data.type)
+        // Draft wins over preview: if the user already had edits in
+        // flight, don't clobber them with the freshly-generated preview.
+        if (!draft) {
+          setTitle(data.title)
+          setBody(data.body)
+          setType(data.type)
+        }
       } catch (err: unknown) {
         if (aborted) return
         setPreviewError(err instanceof Error ? err.message : String(err))
@@ -104,6 +124,19 @@ export function ShipSheet({
       aborted = true
     }
   }, [open, partyId, preview])
+
+  // Persist the editable fields to localStorage on change so reopening
+  // the sheet restores the user's in-progress edits. Gated on `preview`
+  // so we don't write the empty initial state over an existing draft
+  // before the open-effect has had a chance to hydrate it. Also gated
+  // on `!prUrl` so we stop persisting once the PR has shipped (the
+  // success-path clear below handles removal).
+  useEffect(() => {
+    if (!open) return
+    if (prUrl) return
+    if (!preview) return
+    saveShipDraft(partyId, { title, body, type })
+  }, [open, partyId, preview, prUrl, title, body, type])
 
   // Close on Escape. Wired only when open so tab navigation elsewhere isn't
   // affected.
@@ -193,6 +226,10 @@ export function ShipSheet({
       if (!res.ok || !data.prUrl) {
         throw new Error(data.error ?? `ship failed (${res.status})`)
       }
+      // T4.3: drop the persisted draft once the PR is open — reopening
+      // after a successful ship should show the success card, not a
+      // stale form prefilled from an already-shipped draft.
+      clearShipDraft(partyId)
       onShipped(data.prUrl)
     } catch (err: unknown) {
       setShipError(err instanceof Error ? err.message : String(err))
