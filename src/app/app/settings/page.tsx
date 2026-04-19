@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { AppShell } from '@/components/app-shell'
 import { Hairline } from '@/components/ui/hairline'
 import { DAILY_PARTY_LIMIT, loadUsage } from '@/lib/usage'
+import { getKeyInfo } from '@/lib/byok'
+import { ByokCard } from './byok-card'
 
 export const metadata = { title: 'Settings — PatchParty' }
 
@@ -12,12 +14,13 @@ export default async function SettingsPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/login?callbackUrl=/app/settings')
 
-  const [account, usage] = await Promise.all([
+  const [account, usage, keyInfo] = await Promise.all([
     prisma.account.findFirst({
       where: { userId: session.user.id, provider: 'github' },
       select: { scope: true, providerAccountId: true },
     }),
     loadUsage(session.user.id),
+    getKeyInfo(session.user.id),
   ])
 
   async function signOutAction() {
@@ -63,6 +66,16 @@ export default async function SettingsPage() {
             </form>
           </div>
         </div>
+
+        <ByokCard
+          initial={{
+            hasKey: keyInfo.hasKey,
+            fingerprint: keyInfo.fingerprint,
+            validatedAt: keyInfo.validatedAt ?? null,
+            lastUsedAt: keyInfo.lastUsedAt ?? null,
+            preferredKeyMode: keyInfo.preferredKeyMode,
+          }}
+        />
 
         <div className="mt-6 rounded-[10px] border border-slate-800 bg-slate-900/60 p-7">
           <div className="text-[11px] font-mono font-medium uppercase tracking-[0.18em] text-slate-400">
